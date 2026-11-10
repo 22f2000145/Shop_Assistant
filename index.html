@@ -76,7 +76,7 @@ button{cursor:pointer}
 .log li{display:flex;gap:8px;color:var(--muted);overflow-wrap:anywhere}
 .log li b{color:var(--ink);font-weight:500}
 .tabs{display:flex;gap:4px;border-bottom:2px solid var(--line);overflow-x:auto}
-.tab{flex:1;min-height:48px;padding:8px 14px;border:0;background:transparent;font:700 18px var(--display);color:var(--muted);border-bottom:4px solid transparent;margin-bottom:-2px;white-space:nowrap}
+.tab{flex:1;min-height:48px;padding:8px 10px;border:0;background:transparent;font:700 18px var(--display);color:var(--muted);border-bottom:4px solid transparent;margin-bottom:-2px;white-space:nowrap}
 .tab[aria-selected="true"]{color:var(--brand);border-bottom-color:var(--brand)}
 .panel{display:flex;flex-direction:column;gap:14px;min-width:0}
 .note{background:var(--warnbg);border:1px solid var(--mari);border-radius:8px;padding:10px 12px;font-size:14px;display:flex;gap:10px;align-items:flex-start;justify-content:space-between}
@@ -120,6 +120,11 @@ button{cursor:pointer}
 .bar span:last-child{font-family:var(--mono);text-align:right;font-variant-numeric:tabular-nums}
 .track{background:var(--surface2);border-radius:3px}
 h2{font:700 20px var(--display);margin:6px 0 0}
+.form{display:flex;flex-direction:column;gap:12px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:16px}
+.form h2{margin:0}
+.form label{display:flex;flex-direction:column;gap:4px;font-size:14px;font-weight:500;color:var(--muted)}
+.msg{font-size:15px;min-height:1.3em;margin:0;color:var(--ok);font-weight:500}
+.msg.bad{color:var(--bad)}
 dialog{border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--ink);padding:0;width:min(460px,calc(100vw - 32px));max-height:calc(100vh - 48px)}
 dialog::backdrop{background:rgba(8,10,25,.55)}
 .dlg{padding:18px;display:flex;flex-direction:column;gap:12px}
@@ -183,6 +188,7 @@ textarea.copy{width:100%;min-height:150px;font:400 13px var(--mono);border:1px s
         <button class="tab" role="tab" type="button" data-act="tab" data-tab="stock" id="tab-stock">Stock</button>
         <button class="tab" role="tab" type="button" data-act="tab" data-tab="khata" id="tab-khata">Khata</button>
         <button class="tab" role="tab" type="button" data-act="tab" data-tab="report" id="tab-report">Report</button>
+        <button class="tab" role="tab" type="button" data-act="tab" data-tab="setup" id="tab-setup">Setup</button>
       </div>
       <div class="panel" id="panel"><p class="empty">Loading your shop. Your items, bills and khata will appear here.</p></div>
     </section>
@@ -720,7 +726,7 @@ function render(){
   if(!ready)return;
   el('shopName').textContent=S.shop.name;
   el('btnUndo').disabled=!undo.length;
-  ['bill','stock','khata','report'].forEach(function(t){el('tab-'+t).setAttribute('aria-selected',t===tab?'true':'false');});
+  ['bill','stock','khata','report','setup'].forEach(function(t){el('tab-'+t).setAttribute('aria-selected',t===tab?'true':'false');});
   var rp='';
   if(reply){rp='<div class="reply '+(reply.tone==='ok'?'':esc(reply.tone))+'"><span class="heard">“'+esc(reply.heard)+'”</span><span class="said">'+esc(reply.text)+'</span>';
     if(reply.qr&&typeof qrcode==='function'){try{var q=qrcode(0,'M');q.addData(reply.qr);q.make();rp+='<div class="qr">'+q.createSvgTag({cellSize:4,margin:2})+'</div>';}catch(e){}}
@@ -730,11 +736,11 @@ function render(){
   el('logBox').hidden=log.length<2;
   el('log').innerHTML=log.slice(1).map(function(l){return '<li><span>›</span><span><b>'+esc(l.heard)+'</b> — '+esc(l.text.length>90?l.text.slice(0,90)+'…':l.text)+'</span></li>';}).join('');
   var p=el('panel');
-  if(tab==='bill')p.innerHTML=viewBill();else if(tab==='stock'){p.innerHTML=viewStock();renderStockList();}else if(tab==='khata')p.innerHTML=viewKhata();else p.innerHTML=viewReport();
+  if(tab==='bill')p.innerHTML=viewBill();else if(tab==='stock'){p.innerHTML=viewStock();renderStockList();}else if(tab==='khata')p.innerHTML=viewKhata();else if(tab==='setup')p.innerHTML=viewSetup();else p.innerHTML=viewReport();
 }
 function viewBill(){
   var d=S.draft,t=totals(),h='';
-  if(S.example)h+='<div class="note"><span>This is an <b>example shop</b>: sample items, prices, stock and three sample customers so you can try commands. Change them in Stock and Khata, or erase everything in Settings.</span><button type="button" class="btn small" data-act="dismiss">OK</button></div>';
+  if(S.example)h+='<div class="note"><span>This is an <b>example shop</b>: sample items, prices, stock and three sample customers so you can try commands. Put your own shop name and items in the <b>Setup</b> tab, or erase everything in Settings.</span><button type="button" class="btn small" data-act="dismiss">OK</button></div>';
   h+='<div class="receipt"><div class="rhead"><span>'+esc(S.shop.name)+'</span><span>Bill #'+S.billNo+'</span></div>';
   if(!d.lines.length)h+='<p class="empty">No items in this bill yet. Say or type the items, for example <b>do kilo atta, ek maggi</b>.</p>';
   else{h+='<ul class="lines">';d.lines.forEach(function(l,i){
@@ -762,6 +768,42 @@ function viewKhata(){
   h+='<form class="row" id="formCust" novalidate><input class="field grow" id="newCust" maxlength="60" placeholder="New customer name" aria-label="New customer name"><button class="btn small" type="submit">Add customer</button></form>';
   h+='<ul class="list">'+(cs.length?cs.map(function(c){return '<li><button type="button" class="rowbtn" data-act="openCust" data-id="'+esc(c.id)+'"><span class="l"><b>'+esc(c.name)+'</b><small>'+c.ledger.length+' entries</small></span><span class="r '+(c.balance>0?'pos':'neg')+'">'+rs(c.balance)+'</span></button></li>';}).join(''):'<li><p class="empty" style="padding:14px">No customers yet. Add one above, or say "Sharma ji ke khaate mein" while billing.</p></li>')+'</ul>';
   return h;
+}
+var setupMsg={shop:'',add:''};
+function viewSetup(){
+  var h='<form class="form" id="formShop" novalidate><h2>Dukaan ka naam</h2>'
+    +'<label>Shop name (printed on every bill)<input class="field" id="sName" maxlength="60" value="'+esc(S.shop.name)+'"></label>'
+    +'<label>UPI ID for the payment QR (optional)<input class="field" id="sUpi" maxlength="80" placeholder="yourshop@upi" autocapitalize="off" spellcheck="false" value="'+esc(S.shop.upi)+'"></label>'
+    +'<p class="msg" id="shopMsg">'+esc(setupMsg.shop)+'</p><div class="row"><button class="btn primary" type="submit">Save shop name</button></div></form>';
+  h+='<form class="form" id="formAdd" novalidate><h2>Saman jodo (add an item)</h2>'
+    +'<label>Item name<input class="field" id="aName" maxlength="60" placeholder="Aashirvaad Atta 5 kg"></label>'
+    +'<label>Other names customers say (comma separated, optional)<input class="field" id="aAliases" maxlength="300" placeholder="atta packet, aashirvaad"></label>'
+    +'<div class="two"><label>Sold by<select class="field" id="aUnit"><option value="pcs">Piece / packet</option><option value="kg">Kilo (loose)</option><option value="l">Litre (loose)</option></select></label>'
+    +'<label>Selling price ₹<input class="field" id="aPrice" type="number" min="0" step="0.01" inputmode="decimal"></label>'
+    +'<label>Purchase price ₹ (optional)<input class="field" id="aCost" type="number" min="0" step="0.01" inputmode="decimal"></label>'
+    +'<label>Stock you have now<input class="field" id="aStock" type="number" min="0" step="0.001" inputmode="decimal"></label>'
+    +'<label>Warn when stock goes below<input class="field" id="aLow" type="number" min="0" step="0.001" inputmode="decimal"></label>'
+    +'<label>Pieces in one peti (optional)<input class="field" id="aPack" type="number" min="0" step="1" inputmode="numeric"></label></div>'
+    +'<p class="msg" id="addMsg">'+esc(setupMsg.add)+'</p><div class="row"><button class="btn primary" type="submit">Add item</button></div></form>';
+  var last=S.items.slice(-8).reverse();
+  h+='<h2>Your items ('+S.items.length+'), newest first</h2><ul class="list">'+(last.length?last.map(function(i){return '<li><button type="button" class="rowbtn" data-act="editItem" data-id="'+esc(i.id)+'"><span class="l"><b>'+esc(i.name)+'</b><small>'+rs(i.price)+per(i.unit)+' · tap to edit</small></span><span class="r">'+esc(fmtQty(i.stock,i.unit))+(i.unit==='pcs'?' pcs':'')+'</span></button></li>';}).join(''):'<li><p class="empty" style="padding:14px">No items yet. Add your first item above.</p></li>')+'</ul>';
+  h+='<div class="row"><button type="button" class="btn small" data-act="tab" data-tab="stock">See all items in Stock</button></div>';
+  return h;
+}
+function setupSubmit(id){
+  function bad(mid,t){var m=el(mid);m.textContent=t;m.className='msg bad';}
+  if(id==='formShop'){var name=el('sName').value.trim().slice(0,60),upi=el('sUpi').value.trim().slice(0,80);
+    if(!name)return bad('shopMsg','Enter the shop name.');
+    if(upi&&!/^[a-z0-9._-]{2,}@[a-z0-9.-]{2,}$/i.test(upi))return bad('shopMsg','That UPI ID does not look right. It should look like name@bank.');
+    pushUndo();S.shop.name=name;S.shop.upi=upi;setupMsg.shop='Saved. Your bills now say "'+name+'".';return finish();}
+  var nm=el('aName').value.trim().slice(0,60),price=numField('aPrice',1e6),cost=numField('aCost',1e6),stock=numField('aStock',1e6),low=numField('aLow',1e6),pack=numField('aPack',10000);
+  if(!nm)return bad('addMsg','Enter the item name.');
+  if(isNaN(price)||!(price>0))return bad('addMsg','Enter the selling price.');
+  if([cost,stock,low,pack].some(isNaN)||cost<0||stock<0||low<0||pack<0)return bad('addMsg','Check the numbers. They cannot be negative.');
+  var key=normalize(nm);if(S.items.some(function(x){return normalize(x.name)===key;}))return bad('addMsg','"'+nm+'" is already in your items. Tap it in the list below to edit it.');
+  var u=el('aUnit').value;pushUndo();
+  S.items.push({id:gid(),name:nm,unit:u==='kg'?'kg':u==='l'?'l':'pcs',price:r2(price),cost:r2(cost),stock:r3(stock),low:r3(low),pack:Math.floor(pack),aliases:el('aAliases').value.split(',').map(function(a){return a.trim().slice(0,40);}).filter(Boolean).slice(0,20)});
+  setupMsg.add='Added "'+nm+'". You can add the next item.';finish();var f=el('aName');if(f)f.focus();
 }
 function viewReport(){
   var r=todayReport(),lw=lowItems(),mx=Math.max(r.cash,r.upi,r.card,r.udhaar,1),h='';
@@ -811,7 +853,7 @@ function onClick(ev){
   if(act==='settings'){if(!ready)return;el('setName').value=S.shop.name;el('setUpi').value=S.shop.upi;el('setLang').value=S.shop.lang;el('setErr').textContent='';el('setBackup').hidden=true;el('setBackup').value='';idbCounts(function(o){var t='Bills, expenses and khata entries older than 6 months are deleted automatically. Items, customers and balances are always kept.';el('dbInfo').textContent=(o?'Stored on this device: '+o.items+' items, '+o.customers+' customers, '+o.bills+' bills, '+o.expenses+' expenses. ':'')+t;});el('btnReset').textContent='Erase everything and load the example shop';el('btnReset').removeAttribute('data-armed');return openDlg('dlgSet');}
   if(act==='close')return closeDlgs();
   if(!ready)return;
-  if(act==='tab'){tab=b.getAttribute('data-tab');return render();}
+  if(act==='tab'){tab=b.getAttribute('data-tab');setupMsg={shop:'',add:''};return render();}
   if(act==='run')return handle(b.getAttribute('data-run'));
   if(act==='undo')return handle('undo');
   if(act==='dismiss'){S.example=false;return finish();}
@@ -857,7 +899,7 @@ function boot(){
     if(!name)return el('setErr').textContent='Enter the shop name.';
     if(upi&&!/^[a-z0-9._-]{2,}@[a-z0-9.-]{2,}$/i.test(upi))return el('setErr').textContent='That UPI ID does not look right. It should look like name@bank.';
     S.shop.name=name;S.shop.upi=upi;S.shop.lang=el('setLang').value==='hi'?'hi':el('setLang').value==='en'?'en':'auto';closeDlgs();finish();});
-  document.addEventListener('submit',function(e){if(e.target&&e.target.id==='formCust'){e.preventDefault();if(!ready)return;var n=el('newCust').value.trim().slice(0,60);if(!n)return;pushUndo();S.customers.push({id:gid(),name:n,aliases:[],balance:0,ledger:[]});finish();}});
+  document.addEventListener('submit',function(e){if(e.target&&(e.target.id==='formShop'||e.target.id==='formAdd')){e.preventDefault();if(ready)setupSubmit(e.target.id);return;}if(e.target&&e.target.id==='formCust'){e.preventDefault();if(!ready)return;var n=el('newCust').value.trim().slice(0,60);if(!n)return;pushUndo();S.customers.push({id:gid(),name:n,aliases:[],balance:0,ledger:[]});finish();}});
   document.addEventListener('input',function(e){if(e.target&&e.target.id==='stockSearch'){stockQ=e.target.value.slice(0,60);renderStockList();}});
   initStore();initVoice();
 }
