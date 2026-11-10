@@ -220,9 +220,12 @@ textarea.copy{width:100%;min-height:150px;font:400 13px var(--mono);border:1px s
   <h3>Settings</h3>
   <label>Shop name (printed on bills)<input class="field" id="setName" maxlength="60"></label>
   <label>UPI ID for the payment QR (optional)<input class="field" id="setUpi" maxlength="80" placeholder="yourshop@upi" autocapitalize="off" spellcheck="false"></label>
-  <label>Voice language<select class="field" id="setLang"><option value="auto">My device language (best for Hinglish and English)</option><option value="hi">Hindi (experimental)</option><option value="en">English</option></select></label>
+  <label>Voice language<select class="field" id="setLang"><option value="auto">Automatic (Hinglish, Hindi, English)</option><option value="hi">Hindi</option><option value="en">English</option></select></label>
   <p class="err" id="setErr"></p>
   <div class="row"><button class="btn primary" type="submit">Save</button><button class="btn" type="button" data-act="close">Cancel</button></div>
+  <p class="label">Backup</p>
+  <div class="row"><button class="btn small" type="button" data-act="backup">Show backup text</button><button class="btn small" type="button" data-act="restore">Restore from backup text</button></div>
+  <textarea class="copy" id="setBackup" hidden aria-label="Backup text" placeholder="Paste your backup text here, then tap Restore again"></textarea>
   <p class="label">Start over</p>
   <div class="row"><button class="btn danger" type="button" data-act="reset" id="btnReset">Erase everything and load the example shop</button></div>
 </form></dialog>
@@ -628,25 +631,40 @@ var dict=null,buf='',autoT=null;
 function flushVoice(){clearTimeout(autoT);var t=buf.trim();buf='';var lv=document.getElementById('live');if(lv)lv.textContent='';if(t&&ready)handle(t);}
 function micUI(state,msg){
   var b=document.getElementById('mic'),t=document.getElementById('micTitle'),h=document.getElementById('micHint');
-  if(!dict){b.hidden=true;t.textContent='Type a command';h.textContent=msg||'Voice works in Chrome or the Claude desktop app. Here you can type instead.';return;}
+  if(!dict){b.hidden=true;t.textContent='Type a command';h.textContent=msg||'Voice needs Chrome or Edge. Here you can type instead.';return;}
   b.hidden=false;var on=state&&state!=='idle';b.classList.toggle('on',!!on);
   t.textContent=state==='listening'?'Listening…':state==='starting'?'Starting…':state==='finishing'?'Finishing…':'Tap to talk';
   h.textContent=msg||(on?'Keep talking. Each command runs by itself when you pause. Tap to stop.':'Tap once, then just talk. No need to press Send.');
 }
+function webDict(onP,onF,onS){
+  var SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SR)return null;
+  var rec=null,on=false,want=false;
+  return {active:function(){return on||want;},
+    start:function(opts){return new Promise(function(res,rej){var err='',started=false;
+      try{rec=new SR();rec.continuous=true;rec.interimResults=true;rec.lang=opts&&opts.language==='en'?'en-IN':'hi-IN';
+        rec.onstart=function(){on=true;if(!started){started=true;res();}onS({state:'listening'});};
+        rec.onresult=function(e){var interim='';for(var i=e.resultIndex;i<e.results.length;i++){var r=e.results[i];if(r.isFinal)onF({text:' '+r[0].transcript});else interim+=r[0].transcript;}onP({text:interim});};
+        rec.onerror=function(e){var c=e&&e.error;if(c==='not-allowed'||c==='service-not-allowed'){err='not_granted';want=false;}else if(c==='network'||c==='audio-capture'){err='upstream_error';want=false;}};
+        rec.onend=function(){on=false;if(want&&!err){try{rec.start();return;}catch(x){}}want=false;onS({state:'idle',reason:err||'stopped'});if(!started){started=true;rej({code:err||'upstream_error'});}};
+        want=true;onS({state:'starting'});rec.start();
+      }catch(x){want=false;rej({code:'upstream_error'});}});},
+    stop:function(){want=false;try{if(rec)rec.stop();}catch(x){}return Promise.resolve();}};
+}
 function initVoice(){
-  var C=window.claude;if(!C||typeof C.use!=='function')return micUI();
+  function onP(e){var pt=(e&&e.text)||'';if(pt)clearTimeout(autoT);document.getElementById('live').textContent=(buf+' '+pt).trim();}
+  function onF(e){buf+=(e&&e.text)||'';document.getElementById('live').textContent=buf.trim();clearTimeout(autoT);if(buf.trim())autoT=setTimeout(flushVoice,1400);}
+  function onS(e){var st=e&&e.state,msg='';
+    if(st==='idle'){var why=e.reason;
+      if(why==='not_granted')msg='Microphone permission is off for this page. Allow it in the browser, or type instead.';
+      else if(why==='rate_limited')msg='Voice is busy. Try again in a moment.';
+      else if(why==='upstream_error'||why==='unavailable')msg='Voice did not work this time. Check the internet, then try again or type.';
+      flushVoice();}
+    micUI(st,msg);}
+  var C=window.claude;
+  if(!C||typeof C.use!=='function'){dict=webDict(onP,onF,onS);return micUI(dict?'idle':undefined);}
   C.use('dictation').then(function(d){
     dict=d||null;if(!dict)return micUI();
-    dict.onPartial(function(e){var pt=(e&&e.text)||'';if(pt)clearTimeout(autoT);document.getElementById('live').textContent=(buf+' '+pt).trim();});
-    dict.onFinal(function(e){buf+=(e&&e.text)||'';document.getElementById('live').textContent=buf.trim();clearTimeout(autoT);if(buf.trim())autoT=setTimeout(flushVoice,1400);});
-    dict.onState(function(e){var st=e&&e.state;var msg='';
-      if(st==='idle'){var why=e.reason;
-        if(why==='not_granted')msg='Voice is switched off for this page. You can type instead.';
-        else if(why==='rate_limited')msg='Voice is busy. Try again in a moment.';
-        else if(why==='upstream_error'||why==='unavailable')msg='Voice did not work this time. Try again or type.';
-        flushVoice();}
-      micUI(st,msg);});
-    micUI('idle');
+    dict.onPartial(onP);dict.onFinal(onF);dict.onState(onS);micUI('idle');
   },function(){micUI();});
 }
 function micClick(){
@@ -752,7 +770,7 @@ function copyText(text,areaId){
 function onClick(ev){
   var b=ev.target.closest('[data-act]');if(!b||b.disabled)return;var act=b.getAttribute('data-act');
   if(act==='mic')return micClick();
-  if(act==='settings'){if(!ready)return;el('setName').value=S.shop.name;el('setUpi').value=S.shop.upi;el('setLang').value=S.shop.lang;el('setErr').textContent='';el('btnReset').textContent='Erase everything and load the example shop';el('btnReset').removeAttribute('data-armed');return openDlg('dlgSet');}
+  if(act==='settings'){if(!ready)return;el('setName').value=S.shop.name;el('setUpi').value=S.shop.upi;el('setLang').value=S.shop.lang;el('setErr').textContent='';el('setBackup').hidden=true;el('setBackup').value='';el('btnReset').textContent='Erase everything and load the example shop';el('btnReset').removeAttribute('data-armed');return openDlg('dlgSet');}
   if(act==='close')return closeDlgs();
   if(!ready)return;
   if(act==='tab'){tab=b.getAttribute('data-tab');return render();}
@@ -775,6 +793,11 @@ function onClick(ev){
   if(act==='copyBill'){if(lastBill)copyText(billText(lastBill),'billCopy');return;}
   if(act==='copyStatement'){var c=custById(openCust);if(!c)return;
     return copyText([S.shop.name,'Khata: '+c.name].concat(c.ledger.map(function(e){return new Date(e.t).toLocaleDateString('en-IN')+'  '+(e.type==='jama'?'Jama -':'Udhaar +')+rs(e.amt)+'  '+e.note;})).concat(['Baaki: '+rs(c.balance)]).join('\n'),'cuCopy');}
+  if(act==='backup'){var bt=el('setBackup');bt.hidden=false;bt.value=JSON.stringify(S);bt.focus();bt.select();el('setErr').textContent='Copy all of this text and keep it safe (WhatsApp it to yourself or save it in Notes).';try{navigator.clipboard.writeText(bt.value).catch(function(){});}catch(e){}return;}
+  if(act==='restore'){var rt=el('setBackup');if(rt.hidden||!rt.value.trim()){rt.hidden=false;rt.value='';rt.focus();el('setErr').textContent='Paste your backup text in the box, then tap Restore again.';return;}
+    var nd=null;try{nd=sanitize(JSON.parse(rt.value));}catch(e){nd=null;}
+    if(!nd){el('setErr').textContent='That is not a valid VoiceShop backup. Nothing was changed.';return;}
+    pushUndo();S=nd;pending=null;reply=null;lastBill=null;closeDlgs();return finish();}
   if(act==='reset'){if(!b.getAttribute('data-armed')){b.setAttribute('data-armed','1');b.textContent='Tap again to erase all items, bills and khata';return;}
     S=starter();undo=[];pending=null;reply=null;log=[];lastBill=null;tab='bill';closeDlgs();return finish();}
 }

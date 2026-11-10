@@ -41,12 +41,21 @@ python3 -m http.server 8000
 
 It understands Indian quantities and units: pav, adha, dedh, dhai, sawa, saadhe, paune, darjan, peti, bora. Hindi (Devanagari) input is transliterated before parsing.
 
+## Works without Claude
+
+`index.html` is a normal web page. It needs no server, no account and no paid service.
+
+- **Voice:** uses the browser's built-in speech recognition (Chrome or Edge, on Android or desktop). It needs internet and microphone permission. In other browsers the mic is hidden and you type.
+- **Data:** saved in the browser on that device (`localStorage`). Use Settings > Backup to copy your data as text, and Restore to load it on another device or after clearing the browser.
+- **Free hosting:** in this repo go to Settings > Pages, choose "Deploy from a branch", branch `main`, folder `/ (root)`. The app is then live at `https://22f2000145.github.io/Shop_Assistant/`. GitHub Pages on a free account needs the repository to be public.
+
 ## Limits of this prototype
 
-- **Voice and account storage only work inside Claude.** The microphone and the private per-account save use the Claude artifact runtime. Opened from this repo, the mic button is hidden (type instead) and data is saved in the browser's `localStorage` on that device only.
 - The app opens with an **example shop** (sample items, prices and customers). Replace them in Stock and Khata, or erase everything in Settings.
-- No login, staff roles, GST invoices, printer support, supplier ledger or multi-device sync yet. See the spec for the planned phases.
+- Data lives on one device. There is no sync between phones; move data with Backup and Restore.
+- No login, staff roles, GST invoices, printer support or supplier ledger yet. See the spec for the planned phases.
 - The command parser is rule-based. Unusual phrasing may not be understood.
+- Browser speech recognition accuracy in a noisy shop has not been tested.
 
 ## Next steps
 
