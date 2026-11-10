@@ -46,13 +46,29 @@ It understands Indian quantities and units: pav, adha, dedh, dhai, sawa, saadhe,
 `index.html` is a normal web page. It needs no server, no account and no paid service.
 
 - **Voice:** uses the browser's built-in speech recognition (Chrome or Edge, on Android or desktop). It needs internet and microphone permission. In other browsers the mic is hidden and you type.
-- **Data:** saved in the browser on that device (`localStorage`). Use Settings > Backup to copy your data as text, and Restore to load it on another device or after clearing the browser.
+- **Data:** stored in an on-device database (IndexedDB, database name `voiceshop`). Nothing is sent to a server. Use Settings > Backup to copy your data as text, and Restore to load it on another device.
 - **Free hosting:** in this repo go to Settings > Pages, choose "Deploy from a branch", branch `main`, folder `/ (root)`. The app is then live at `https://22f2000145.github.io/Shop_Assistant/`. GitHub Pages on a free account needs the repository to be public.
+
+## Database
+
+The database lives on the phone or computer where the app is opened.
+
+| Store | Key | Holds |
+|---|---|---|
+| `meta` | `shop` | Shop name, UPI ID, voice language, next bill number, the open bill and held bills |
+| `items` | `id` | Name, other names, unit, selling price, purchase price, stock, low-stock level, peti size |
+| `customers` | `id` | Name, balance, ledger entries (udhaar and jama) |
+| `bills` | `id`, index on `t` | Bill number, time, lines, discount, total, payment mode, customer |
+| `expenses` | `id`, index on `t` | Time, amount, note |
+
+**Retention: 6 months (183 days).** Each time the app opens, bills, expenses and khata ledger entries older than that are deleted. Items, customers and their balances are never deleted by retention.
+
+The app keeps the most recent 1,000 bills in memory for reports; older ones within the 6 months stay in the database.
 
 ## Limits of this prototype
 
 - The app opens with an **example shop** (sample items, prices and customers). Replace them in Stock and Khata, or erase everything in Settings.
-- Data lives on one device. There is no sync between phones; move data with Backup and Restore.
+- Data lives on one device. There is no sync between phones; move data with Backup and Restore. Clearing the browser's site data, or uninstalling the browser, deletes the database.
 - No login, staff roles, GST invoices, printer support or supplier ledger yet. See the spec for the planned phases.
 - The command parser is rule-based. Unusual phrasing may not be understood.
 - Browser speech recognition accuracy in a noisy shop has not been tested.

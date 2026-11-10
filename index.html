@@ -223,6 +223,8 @@ textarea.copy{width:100%;min-height:150px;font:400 13px var(--mono);border:1px s
   <label>Voice language<select class="field" id="setLang"><option value="auto">Automatic (Hinglish, Hindi, English)</option><option value="hi">Hindi</option><option value="en">English</option></select></label>
   <p class="err" id="setErr"></p>
   <div class="row"><button class="btn primary" type="submit">Save</button><button class="btn" type="button" data-act="close">Cancel</button></div>
+  <p class="label">Database</p>
+  <p class="sub" id="dbInfo">Bills, expenses and khata entries older than 6 months are deleted automatically. Items, customers and balances are always kept.</p>
   <p class="label">Backup</p>
   <div class="row"><button class="btn small" type="button" data-act="backup">Show backup text</button><button class="btn small" type="button" data-act="restore">Restore from backup text</button></div>
   <textarea class="copy" id="setBackup" hidden aria-label="Backup text" placeholder="Paste your backup text here, then tap Restore again"></textarea>
@@ -290,8 +292,8 @@ function sanitize(d){
       billNo:Math.max(1,Math.floor(num(d.billNo,1))),
       items:d.items.slice(0,1500).map(function(i){return {id:str(i.id,40)||gid(),name:str(i.name,60)||'Item',unit:unit(i.unit),price:Math.max(0,num(i.price)),cost:Math.max(0,num(i.cost)),stock:num(i.stock),low:Math.max(0,num(i.low)),aliases:(Array.isArray(i.aliases)?i.aliases:[]).slice(0,20).map(function(a){return str(a,40);}),pack:Math.max(0,num(i.pack))};}),
       customers:(Array.isArray(d.customers)?d.customers:[]).slice(0,1500).map(function(c){return {id:str(c.id,40)||gid(),name:str(c.name,60)||'Customer',aliases:(Array.isArray(c.aliases)?c.aliases:[]).slice(0,10).map(function(a){return str(a,40);}),balance:num(c.balance),ledger:(Array.isArray(c.ledger)?c.ledger:[]).slice(-100).map(function(e){return {t:num(e.t),type:e.type==='jama'?'jama':'udhaar',amt:num(e.amt),note:str(e.note,80)};})};}),
-      bills:(Array.isArray(d.bills)?d.bills:[]).slice(-300).map(function(b){return {id:str(b.id,40)||gid(),no:num(b.no),t:num(b.t),disc:num(b.disc),total:num(b.total),mode:str(b.mode,10),cust:str(b.cust,60),lines:(Array.isArray(b.lines)?b.lines:[]).slice(0,100).map(function(l){return {name:str(l.name,60),qty:num(l.qty),unit:unit(l.unit),price:num(l.price),cost:num(l.cost),total:num(l.total)};})};}),
-      expenses:(Array.isArray(d.expenses)?d.expenses:[]).slice(-300).map(function(e){return {t:num(e.t),amt:num(e.amt),note:str(e.note,80)};}),
+      bills:(Array.isArray(d.bills)?d.bills:[]).slice(-1000).map(function(b){return {id:str(b.id,40)||gid(),no:num(b.no),t:num(b.t),disc:num(b.disc),total:num(b.total),mode:str(b.mode,10),cust:str(b.cust,60),lines:(Array.isArray(b.lines)?b.lines:[]).slice(0,100).map(function(l){return {name:str(l.name,60),qty:num(l.qty),unit:unit(l.unit),price:num(l.price),cost:num(l.cost),total:num(l.total)};})};}),
+      expenses:(Array.isArray(d.expenses)?d.expenses:[]).slice(-300).map(function(e){return {id:str(e.id,40)||gid(),t:num(e.t),amt:num(e.amt),note:str(e.note,80)};}),
       draft:draft(d.draft),held:(Array.isArray(d.held)?d.held:[]).slice(0,5).map(draft)};
   }catch(e){return null;}
 }
@@ -439,7 +441,7 @@ function completeBill(mode,cust){
   S.billNo++;
   S.draft.lines.forEach(function(l){var it=byId(l.itemId);if(it)it.stock=r3(it.stock-l.qty);});
   if(mode==='udhaar'&&cust){cust.balance=r2(cust.balance+t.total);cust.ledger.push({t:now,type:'udhaar',amt:t.total,note:'Bill #'+bill.no});}
-  S.bills.push(bill);if(S.bills.length>300)S.bills=S.bills.slice(-300);
+  S.bills.push(bill);capMem('bills',1000);
   S.draft={lines:[],disc:0,pct:0};lastBill=bill;return bill;
 }
 function todayReport(){
@@ -500,7 +502,7 @@ function handle(raw){
   if(/\b(mangwana|mangana|mangwani|reorder|khatam)\b|low stock/.test(text)){var lw=lowItems();tab='stock';lowOnly=true;
     return R(lw.length?'Order these: '+lw.slice(0,8).map(function(i){return i.name+' ('+fmtQty(i.stock,i.unit)+' left)';}).join(', ')+(lw.length>8?' and '+(lw.length-8)+' more.':'.'):'Nothing is running low right now.',lw.length?'warn':'ok');}
   if(/\b(kharcha|kharch|expense|bijli|kiraya|rent|salary|tankhwah|bhada)\b/.test(text)){var ea=allNumbers(tokens)[0];
-    if(ea>0&&ea<=10000000){pushUndo();S.expenses.push({t:Date.now(),amt:r2(ea),note:heard.slice(0,80)});if(S.expenses.length>300)S.expenses=S.expenses.slice(-300);return R('Expense of '+rs(ea)+' recorded.');}
+    if(ea>0&&ea<=10000000){pushUndo();S.expenses.push({id:gid(),t:Date.now(),amt:r2(ea),note:heard.slice(0,80)});capMem('expenses',300);return R('Expense of '+rs(ea)+' recorded.');}
     return R('How much was the expense? Say it with the amount, like "bijli ka bill 1200".','warn');}
   if(/\b(naya|new|add) (item|saman|product)\b|item jodo/.test(text))return newItem(tokens,R);
 
@@ -595,12 +597,44 @@ function finish(){persist();if(HAS_DOM)render();}
 
 /* ---------- storage: private cloud doc per signed-in person, device copy as fallback ---------- */
 var ref=null,saveTimer=null,saving=false,dirty=false,retries=0,statusKind='load';
+/* On-device database (IndexedDB). Stores: meta, items, customers, bills, expenses. History older than RETAIN is deleted. */
+var RETAIN=183*86400000,STORES=['meta','items','customers','bills','expenses'],idb=null,idbBusy=false,idbDirty=false,idbWipe=false,known={bills:{},expenses:{}};
+function capMem(n,max){if(S[n].length>max){S[n].slice(0,S[n].length-max).forEach(function(x){delete known[n][x.id];});S[n]=S[n].slice(-max);}}
+function pruneOld(){var cut=Date.now()-RETAIN,ch=false;
+  ['bills','expenses'].forEach(function(n){var k=S[n].filter(function(x){return x.t>=cut;});if(k.length!==S[n].length){S[n]=k;ch=true;}});
+  S.customers.forEach(function(c){var k=c.ledger.filter(function(e){return e.t>=cut;});if(k.length!==c.ledger.length){c.ledger=k;ch=true;}});return ch;}
+function idbOpen(){return new Promise(function(res){try{var rq=indexedDB.open('voiceshop',1);
+  rq.onupgradeneeded=function(){var d=rq.result;d.createObjectStore('meta');d.createObjectStore('items',{keyPath:'id'});d.createObjectStore('customers',{keyPath:'id'});d.createObjectStore('bills',{keyPath:'id'}).createIndex('t','t');d.createObjectStore('expenses',{keyPath:'id'}).createIndex('t','t');};
+  rq.onsuccess=function(){res(rq.result);};rq.onerror=function(){res(null);};rq.onblocked=function(){res(null);};}catch(e){res(null);}});}
+function idbLoad(){return new Promise(function(res){try{
+  var tx=idb.transaction(STORES,'readwrite'),cut=Date.now()-RETAIN,out={items:[],customers:[],bills:[],expenses:[]};
+  ['bills','expenses'].forEach(function(n){var del=tx.objectStore(n).index('t').openCursor(IDBKeyRange.upperBound(cut,true));del.onsuccess=function(){var c=del.result;if(c){c.delete();c.continue();}};
+    var max=n==='bills'?1000:300,rd=tx.objectStore(n).index('t').openCursor(null,'prev');rd.onsuccess=function(){var c=rd.result;if(c&&out[n].length<max){if(c.value.t>=cut)out[n].push(c.value);c.continue();}};});
+  var m=tx.objectStore('meta').get('shop');m.onsuccess=function(){out.meta=m.result;};
+  ['items','customers'].forEach(function(n){var g=tx.objectStore(n).getAll();g.onsuccess=function(){out[n]=(g.result||[]).sort(function(a,b){return (a.o||0)-(b.o||0);});};});
+  tx.oncomplete=function(){if(!out.meta)return res(null);var mt=out.meta;
+    res(sanitize({shop:mt.shop,billNo:mt.billNo,example:mt.example,draft:mt.draft,held:mt.held,items:out.items,customers:out.customers,bills:out.bills.reverse(),expenses:out.expenses.reverse()}));};
+  tx.onerror=tx.onabort=function(){res(null);};}catch(e){res(null);}});}
+function idbSave(){
+  if(!idb||!S)return;if(idbBusy){idbDirty=true;return;}idbBusy=true;idbDirty=false;
+  try{var tx=idb.transaction(STORES,'readwrite');
+    tx.objectStore('meta').put(JSON.parse(JSON.stringify({shop:S.shop,billNo:S.billNo,example:S.example,draft:S.draft,held:S.held})),'shop');
+    ['items','customers'].forEach(function(n){var st=tx.objectStore(n);st.clear();S[n].forEach(function(x,i){var r=JSON.parse(JSON.stringify(x));r.o=i;st.put(r);});});
+    ['bills','expenses'].forEach(function(n){var st=tx.objectStore(n),now={};if(idbWipe)st.clear();
+      S[n].forEach(function(x){now[x.id]=1;st.put(JSON.parse(JSON.stringify(x)));});
+      if(!idbWipe)Object.keys(known[n]).forEach(function(id){if(!now[id])st.delete(id);});known[n]=now;});
+    idbWipe=false;
+    tx.oncomplete=function(){idbBusy=false;setStatus('db');try{localStorage.removeItem(LS_KEY);}catch(e){}if(idbDirty)idbSave();};
+    tx.onerror=tx.onabort=function(){idbBusy=false;setStatus('error');};
+  }catch(e){idbBusy=false;setStatus('error');}
+}
+function idbCounts(cb){if(!idb)return cb(null);try{var tx=idb.transaction(STORES,'readonly'),o={};['items','customers','bills','expenses'].forEach(function(n){var c=tx.objectStore(n).count();c.onsuccess=function(){o[n]=c.result;};});tx.oncomplete=function(){cb(o);};tx.onerror=tx.onabort=function(){cb(null);};}catch(e){cb(null);}}
 function setStatus(k){statusKind=k;if(!HAS_DOM)return;var el=document.getElementById('saveStatus');if(!el)return;
-  var m={load:['Loading your shop…',''],cloud:['Saved privately to your account','ok'],device:['Saved on this device only',''],saving:['Saving…',''],error:['Not saved. Check your connection','bad']}[k];
+  var m={load:['Loading your shop…',''],cloud:['Saved privately to your account','ok'],device:['Saved on this device only',''],db:['Saved in this phone\'s database','ok'],saving:['Saving…',''],error:['Not saved. Check your connection','bad']}[k];
   el.textContent=m[0];el.className='pill '+m[1];}
 function lsGet(){try{var v=localStorage.getItem(LS_KEY);return v?sanitize(JSON.parse(v)):null;}catch(e){return null;}}
 function lsSet(){try{localStorage.setItem(LS_KEY,JSON.stringify(S));}catch(e){}}
-function persist(){if(!HAS_DOM||!S)return;lsSet();if(!ref){setStatus('device');return;}dirty=true;setStatus('saving');clearTimeout(saveTimer);saveTimer=setTimeout(flush,700);}
+function persist(){if(!HAS_DOM||!S)return;if(idb&&!ref){idbSave();return;}lsSet();if(!ref){setStatus('device');return;}dirty=true;setStatus('saving');clearTimeout(saveTimer);saveTimer=setTimeout(flush,700);}
 function flush(){
   if(saving||!dirty||!ref)return;saving=true;dirty=false;
   var body;try{body=JSON.parse(JSON.stringify(S));}catch(e){saving=false;setStatus('error');return;}
@@ -610,7 +644,11 @@ function flush(){
 function timeout(p,ms){return new Promise(function(res,rej){var t=setTimeout(function(){rej({code:'timeout'});},ms);p.then(function(v){clearTimeout(t);res(v);},function(e){clearTimeout(t);rej(e);});});}
 function initStore(){
   var local=lsGet(),C=window.claude;
-  function useLocal(){S=local||starter();ref=null;ready=true;setStatus('device');boot2();}
+  function useLocal(){ref=null;
+    function done(data){S=data||local||starter();ready=true;if(data){S.bills.forEach(function(x){known.bills[x.id]=1;});S.expenses.forEach(function(x){known.expenses[x.id]=1;});}
+      boot2();if(idb){setStatus('db');if(!data)idbSave();try{if(navigator.storage&&navigator.storage.persist)navigator.storage.persist().catch(function(){});}catch(e){}}else setStatus('device');}
+    if(!window.indexedDB)return done(null);
+    idbOpen().then(function(d){idb=d;if(!idb)return done(null);idbLoad().then(done);});}
   if(!C||typeof C.use!=='function')return useLocal();
   Promise.all([C.use('db'),C.use('user')]).then(function(r){
     var db=r[0],user=r[1];if(!db||!user)return useLocal();
@@ -770,7 +808,7 @@ function copyText(text,areaId){
 function onClick(ev){
   var b=ev.target.closest('[data-act]');if(!b||b.disabled)return;var act=b.getAttribute('data-act');
   if(act==='mic')return micClick();
-  if(act==='settings'){if(!ready)return;el('setName').value=S.shop.name;el('setUpi').value=S.shop.upi;el('setLang').value=S.shop.lang;el('setErr').textContent='';el('setBackup').hidden=true;el('setBackup').value='';el('btnReset').textContent='Erase everything and load the example shop';el('btnReset').removeAttribute('data-armed');return openDlg('dlgSet');}
+  if(act==='settings'){if(!ready)return;el('setName').value=S.shop.name;el('setUpi').value=S.shop.upi;el('setLang').value=S.shop.lang;el('setErr').textContent='';el('setBackup').hidden=true;el('setBackup').value='';idbCounts(function(o){var t='Bills, expenses and khata entries older than 6 months are deleted automatically. Items, customers and balances are always kept.';el('dbInfo').textContent=(o?'Stored on this device: '+o.items+' items, '+o.customers+' customers, '+o.bills+' bills, '+o.expenses+' expenses. ':'')+t;});el('btnReset').textContent='Erase everything and load the example shop';el('btnReset').removeAttribute('data-armed');return openDlg('dlgSet');}
   if(act==='close')return closeDlgs();
   if(!ready)return;
   if(act==='tab'){tab=b.getAttribute('data-tab');return render();}
@@ -797,11 +835,12 @@ function onClick(ev){
   if(act==='restore'){var rt=el('setBackup');if(rt.hidden||!rt.value.trim()){rt.hidden=false;rt.value='';rt.focus();el('setErr').textContent='Paste your backup text in the box, then tap Restore again.';return;}
     var nd=null;try{nd=sanitize(JSON.parse(rt.value));}catch(e){nd=null;}
     if(!nd){el('setErr').textContent='That is not a valid VoiceShop backup. Nothing was changed.';return;}
-    pushUndo();S=nd;pending=null;reply=null;lastBill=null;closeDlgs();return finish();}
+    pushUndo();S=nd;idbWipe=true;pending=null;reply=null;lastBill=null;closeDlgs();return finish();}
   if(act==='reset'){if(!b.getAttribute('data-armed')){b.setAttribute('data-armed','1');b.textContent='Tap again to erase all items, bills and khata';return;}
-    S=starter();undo=[];pending=null;reply=null;log=[];lastBill=null;tab='bill';closeDlgs();return finish();}
+    S=starter();idbWipe=true;undo=[];pending=null;reply=null;log=[];lastBill=null;tab='bill';closeDlgs();return finish();}
 }
 function boot2(){
+  if(pruneOld())persist();
   var inp=el('cmdInput');inp.disabled=false;el('cmdSend').disabled=false;
   el('chips').innerHTML=CHIPS.map(function(c){return '<button type="button" class="chip" data-act="run" data-run="'+esc(c)+'">'+esc(c)+'</button>';}).join('');
   render();
