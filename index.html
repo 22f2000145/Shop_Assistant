@@ -1,0 +1,808 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<style>body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+</head>
+<body>
+<title>VoiceShop</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700&family=Hind:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a shop counter. Left = the "helper" you talk to (mic, reply, recent commands). Right = the paper: receipt, stock register, khata, day report. Stacks to one column on a phone. */
+:root{
+  --bg:#e9edf5; --surface:#ffffff; --surface2:#f3f5fa; --ink:#161b38; --muted:#586083; --line:#d3d9e8;
+  --brand:#2a39b8; --brand-ink:#ffffff; --mari:#f5a300; --mari-ink:#2b1d00;
+  --ok:#0f7a57; --okbg:#dff4ea; --warn:#a85600; --warnbg:#fdeed6; --bad:#bf2a36; --badbg:#fbe2e4;
+  --display:"Baloo 2","Hind",system-ui,sans-serif; --body:"Hind",system-ui,-apple-system,"Segoe UI",sans-serif; --mono:"DM Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#0d1022; --surface:#171b35; --surface2:#1e2343; --ink:#eef0fb; --muted:#a4aaca; --line:#30365f;
+  --brand:#93a0ff; --brand-ink:#0d1022; --mari:#ffb81f; --mari-ink:#2b1d00;
+  --ok:#52d3a3; --okbg:#123a30; --warn:#ffb35c; --warnbg:#43300f; --bad:#ff808a; --badbg:#47181e; color-scheme:dark } }
+:root[data-theme="dark"]{
+  --bg:#0d1022; --surface:#171b35; --surface2:#1e2343; --ink:#eef0fb; --muted:#a4aaca; --line:#30365f;
+  --brand:#93a0ff; --brand-ink:#0d1022; --mari:#ffb81f; --mari-ink:#2b1d00;
+  --ok:#52d3a3; --okbg:#123a30; --warn:#ffb35c; --warnbg:#43300f; --bad:#ff808a; --badbg:#47181e; color-scheme:dark }
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font:400 16px/1.5 var(--body)}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--brand);outline-offset:2px}
+.app{max-width:1120px;margin:0 auto;padding-block:20px 48px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:18px}
+.top{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;justify-content:space-between}
+.top h1{font:700 30px/1.1 var(--display);margin:0;text-wrap:balance}
+.sub{margin:2px 0 0;color:var(--muted);font-size:14px}
+.topr{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.pill{font-size:13px;font-weight:500;padding:5px 10px;border-radius:99px;background:var(--surface);border:1px solid var(--line);color:var(--muted)}
+.pill.ok{color:var(--ok);border-color:var(--ok)} .pill.bad{color:var(--bad);border-color:var(--bad)}
+.btn{min-height:44px;padding:8px 16px;border-radius:6px;border:1px solid var(--line);background:var(--surface);font-weight:600}
+.btn:hover{border-color:var(--brand)}
+.btn.primary{background:var(--brand);color:var(--brand-ink);border-color:var(--brand)}
+.btn.danger{color:var(--bad);border-color:var(--bad)}
+.btn.small{min-height:36px;padding:4px 12px;font-size:14px}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.grid{display:grid;grid-template-columns:minmax(0,1fr);gap:18px}
+@media (min-width:900px){.grid{grid-template-columns:minmax(0,380px) minmax(0,1fr);align-items:start}.dock{position:sticky;top:calc(env(safe-area-inset-top,0px) + 12px)}}
+.dock,.work{min-width:0;display:flex;flex-direction:column;gap:14px}
+@media (max-width:899px){.dock{display:contents}.dock>.talk:first-child{order:1}.work{order:2}.dock>.talk{order:3}}
+.live:empty{display:none}
+.lq{margin-left:auto}
+.talk{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px;display:flex;flex-direction:column;gap:12px}
+.microw{display:flex;gap:14px;align-items:center}
+.mic{flex:none;width:84px;height:84px;border-radius:50%;border:0;background:var(--mari);color:var(--mari-ink);display:grid;place-items:center;box-shadow:0 0 0 6px color-mix(in srgb,var(--mari) 25%,transparent)}
+.mic svg{width:34px;height:34px}
+.mic.on{background:var(--bad);color:#fff;animation:pulse 1.2s ease-in-out infinite}
+@keyframes pulse{50%{box-shadow:0 0 0 14px color-mix(in srgb,var(--bad) 18%,transparent)}}
+@media (prefers-reduced-motion:reduce){.mic.on{animation:none}}
+.mictext{min-width:0}
+.mictext b{font:700 20px/1.2 var(--display);display:block}
+.mictext span{color:var(--muted);font-size:14px}
+.live{font-family:var(--mono);font-size:14px;color:var(--brand);min-height:1.4em;overflow-wrap:anywhere}
+.cmd{display:flex;gap:8px}
+.cmd input{flex:1;min-width:0;min-height:48px;padding:8px 12px;border-radius:6px;border:1px solid var(--line);background:var(--surface2)}
+.reply{border-radius:8px;padding:12px 14px;background:var(--surface2);border-left:5px solid var(--ok);display:flex;flex-direction:column;gap:8px}
+.reply.warn{border-color:var(--mari);background:var(--warnbg)} .reply.err{border-color:var(--bad);background:var(--badbg)}
+.reply .heard{font-family:var(--mono);font-size:13px;color:var(--muted);overflow-wrap:anywhere}
+.reply .said{font-size:18px;font-weight:500;line-height:1.35;overflow-wrap:anywhere}
+.reply .acts{display:flex;flex-wrap:wrap;gap:8px}
+.qr{background:#fff;padding:8px;border-radius:6px;align-self:flex-start;line-height:0}
+.label{font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{border:1px dashed var(--line);background:transparent;border-radius:99px;padding:6px 12px;font-size:14px;min-height:36px;text-align:left}
+.chip:hover{border-color:var(--brand);color:var(--brand)}
+.log{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;font-size:14px}
+.log li{display:flex;gap:8px;color:var(--muted);overflow-wrap:anywhere}
+.log li b{color:var(--ink);font-weight:500}
+.tabs{display:flex;gap:4px;border-bottom:2px solid var(--line);overflow-x:auto}
+.tab{flex:1;min-height:48px;padding:8px 14px;border:0;background:transparent;font:700 18px var(--display);color:var(--muted);border-bottom:4px solid transparent;margin-bottom:-2px;white-space:nowrap}
+.tab[aria-selected="true"]{color:var(--brand);border-bottom-color:var(--brand)}
+.panel{display:flex;flex-direction:column;gap:14px;min-width:0}
+.note{background:var(--warnbg);border:1px solid var(--mari);border-radius:8px;padding:10px 12px;font-size:14px;display:flex;gap:10px;align-items:flex-start;justify-content:space-between}
+.receipt{background:var(--surface);border:1px solid var(--line);border-bottom:0;padding:16px 16px 22px;position:relative}
+.receipt::after{content:"";position:absolute;left:-1px;right:-1px;bottom:-9px;height:10px;background:linear-gradient(135deg,var(--surface) 50%,transparent 50%) 0 0/14px 10px repeat-x,linear-gradient(225deg,var(--surface) 50%,transparent 50%) 0 0/14px 10px repeat-x}
+.rhead{display:flex;justify-content:space-between;gap:10px;font:500 13px var(--mono);color:var(--muted);text-transform:uppercase;letter-spacing:.06em;padding-bottom:10px;border-bottom:1px dashed var(--line)}
+.lines{list-style:none;margin:0;padding:0}
+.lines li{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px dashed var(--line)}
+.ln{min-width:0;flex:1 1 150px;display:flex;flex-direction:column}
+.nm{font-weight:600;font-size:18px;overflow-wrap:anywhere}
+.rate{font:400 13px var(--mono);color:var(--muted)}
+.lq{display:flex;align-items:center;gap:6px}
+.sq{width:40px;height:40px;border-radius:6px;border:1px solid var(--line);background:var(--surface2);font-size:20px;line-height:1;font-weight:600}
+.sq.x{color:var(--bad)}
+.amt{font:500 18px var(--mono);font-variant-numeric:tabular-nums;min-width:86px;text-align:right}
+.empty{color:var(--muted);padding:18px 0 6px;margin:0}
+.tot{display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding-top:8px;font-family:var(--mono);font-variant-numeric:tabular-nums}
+.tot.big{font:700 34px/1.1 var(--display);padding-top:12px}
+.tot.big span:last-child{font-family:var(--mono);font-weight:500}
+.pay{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:6px}
+.pay .btn{min-height:56px;font:700 19px var(--display);padding:6px}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.row .grow{flex:1;min-width:140px}
+.field{min-height:44px;padding:8px 12px;border-radius:6px;border:1px solid var(--line);background:var(--surface);width:100%}
+.list{list-style:none;margin:0;padding:0;background:var(--surface);border:1px solid var(--line);border-radius:8px}
+.list li{border-bottom:1px solid var(--line)} .list li:last-child{border-bottom:0}
+.rowbtn{width:100%;display:flex;gap:10px;align-items:center;justify-content:space-between;padding:12px 14px;border:0;background:transparent;text-align:left;min-height:56px}
+.rowbtn:hover{background:var(--surface2)}
+.rowbtn .l{min-width:0;display:flex;flex-direction:column}
+.rowbtn .l b{font-weight:600;overflow-wrap:anywhere}
+.rowbtn .l small{color:var(--muted);font:400 13px var(--mono)}
+.rowbtn .r{font:500 16px var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap;text-align:right}
+.tag{display:inline-block;font:600 12px var(--body);padding:2px 8px;border-radius:99px;margin-left:6px}
+.tag.low{background:var(--warnbg);color:var(--warn)} .tag.out{background:var(--badbg);color:var(--bad)} .tag.ok{background:var(--okbg);color:var(--ok)}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px 14px;min-width:0}
+.stat b{display:block;font:500 24px var(--mono);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.bars{display:flex;flex-direction:column;gap:8px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:14px}
+.bar{display:grid;grid-template-columns:70px minmax(0,1fr) 90px;gap:10px;align-items:center;font-size:14px}
+.bar i{display:block;height:14px;border-radius:3px;background:var(--brand);min-width:2px}
+.bar span:last-child{font-family:var(--mono);text-align:right;font-variant-numeric:tabular-nums}
+.track{background:var(--surface2);border-radius:3px}
+h2{font:700 20px var(--display);margin:6px 0 0}
+dialog{border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--ink);padding:0;width:min(460px,calc(100vw - 32px));max-height:calc(100vh - 48px)}
+dialog::backdrop{background:rgba(8,10,25,.55)}
+.dlg{padding:18px;display:flex;flex-direction:column;gap:12px}
+.dlg h3{font:700 22px var(--display);margin:0}
+.dlg label{display:flex;flex-direction:column;gap:4px;font-size:14px;font-weight:500;color:var(--muted)}
+.two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.ledger{list-style:none;margin:0;padding:0;max-height:220px;overflow:auto;border:1px solid var(--line);border-radius:6px}
+.ledger li{display:flex;justify-content:space-between;gap:10px;padding:8px 10px;border-bottom:1px solid var(--line);font-size:14px}
+.ledger li:last-child{border-bottom:0}
+.ledger .a{font-family:var(--mono);white-space:nowrap}
+.pos{color:var(--bad)} .neg{color:var(--ok)}
+.err{color:var(--bad);font-size:14px;min-height:1.2em;margin:0}
+textarea.copy{width:100%;min-height:150px;font:400 13px var(--mono);border:1px solid var(--line);border-radius:6px;background:var(--surface2);padding:8px}
+</style>
+
+<div class="app">
+  <header class="top">
+    <div>
+      <h1 id="shopName">VoiceShop</h1>
+      <p class="sub">Bill, stock and khata by voice</p>
+    </div>
+    <div class="topr">
+      <span id="saveStatus" class="pill">Loading your shop…</span>
+      <button class="btn small" data-act="undo" id="btnUndo" type="button">Undo</button>
+      <button class="btn small" data-act="settings" type="button">Settings</button>
+    </div>
+  </header>
+
+  <div class="grid">
+    <section class="dock" aria-label="Talk to the shop">
+      <div class="talk">
+        <div class="microw">
+          <button class="mic" id="mic" type="button" data-act="mic" aria-label="Start or stop listening" hidden>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" fill="currentColor"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+          </button>
+          <div class="mictext">
+            <b id="micTitle">Type a command</b>
+            <span id="micHint">Checking if voice is available here…</span>
+          </div>
+        </div>
+        <div class="live" id="live" aria-live="polite"></div>
+        <form class="cmd" id="cmdForm" autocomplete="off">
+          <input id="cmdInput" type="text" maxlength="300" placeholder="do kilo atta, ek maggi" aria-label="Type a command" disabled>
+          <button class="btn primary" id="cmdSend" type="submit" disabled>Send</button>
+        </form>
+        <div id="reply" aria-live="polite"></div>
+      </div>
+      <div class="talk">
+        <p class="label">Try saying</p>
+        <div class="chips" id="chips"></div>
+      </div>
+      <div class="talk" id="logBox" hidden>
+        <p class="label">Recent commands</p>
+        <ul class="log" id="log"></ul>
+      </div>
+    </section>
+
+    <section class="work">
+      <div class="tabs" role="tablist">
+        <button class="tab" role="tab" type="button" data-act="tab" data-tab="bill" id="tab-bill">Bill</button>
+        <button class="tab" role="tab" type="button" data-act="tab" data-tab="stock" id="tab-stock">Stock</button>
+        <button class="tab" role="tab" type="button" data-act="tab" data-tab="khata" id="tab-khata">Khata</button>
+        <button class="tab" role="tab" type="button" data-act="tab" data-tab="report" id="tab-report">Report</button>
+      </div>
+      <div class="panel" id="panel"><p class="empty">Loading your shop. Your items, bills and khata will appear here.</p></div>
+    </section>
+  </div>
+</div>
+
+<dialog id="dlgItem"><form class="dlg" id="formItem" novalidate>
+  <h3 id="itemTitle">Item</h3>
+  <label>Name<input class="field" id="itName" maxlength="60" required></label>
+  <label>Other names it is called (comma separated)<input class="field" id="itAliases" maxlength="300" placeholder="atta, aata, flour"></label>
+  <div class="two">
+    <label>Sold by<select class="field" id="itUnit"><option value="pcs">Piece / packet</option><option value="kg">Kilo (loose)</option><option value="l">Litre (loose)</option></select></label>
+    <label>Pieces in one peti<input class="field" id="itPack" type="number" min="0" step="1" inputmode="numeric"></label>
+    <label>Selling price ₹<input class="field" id="itPrice" type="number" min="0" step="0.01" inputmode="decimal"></label>
+    <label>Purchase price ₹<input class="field" id="itCost" type="number" min="0" step="0.01" inputmode="decimal"></label>
+    <label>Stock now<input class="field" id="itStock" type="number" step="0.001" inputmode="decimal"></label>
+    <label>Warn when below<input class="field" id="itLow" type="number" min="0" step="0.001" inputmode="decimal"></label>
+  </div>
+  <p class="err" id="itErr"></p>
+  <div class="row"><button class="btn primary" type="submit">Save item</button><button class="btn" type="button" data-act="close">Cancel</button><button class="btn danger" type="button" data-act="delItem" id="itDel">Delete</button></div>
+</form></dialog>
+
+<dialog id="dlgCust"><div class="dlg">
+  <h3 id="cuName">Customer</h3>
+  <div class="tot big"><span>Baaki</span><span id="cuBal">₹0</span></div>
+  <form class="row" id="formPay" novalidate><input class="field grow" id="cuAmt" type="number" min="1" step="0.01" inputmode="decimal" placeholder="Amount received ₹" aria-label="Amount received"><button class="btn primary" type="submit">Record payment</button></form>
+  <p class="err" id="cuErr"></p>
+  <p class="label">Ledger</p>
+  <ul class="ledger" id="cuLedger"></ul>
+  <div class="row"><button class="btn" type="button" data-act="copyStatement">Copy statement</button><button class="btn" type="button" data-act="close">Close</button></div>
+  <textarea class="copy" id="cuCopy" readonly hidden aria-label="Statement text"></textarea>
+</div></dialog>
+
+<dialog id="dlgSet"><form class="dlg" id="formSet" novalidate>
+  <h3>Settings</h3>
+  <label>Shop name (printed on bills)<input class="field" id="setName" maxlength="60"></label>
+  <label>UPI ID for the payment QR (optional)<input class="field" id="setUpi" maxlength="80" placeholder="yourshop@upi" autocapitalize="off" spellcheck="false"></label>
+  <label>Voice language<select class="field" id="setLang"><option value="auto">My device language (best for Hinglish and English)</option><option value="hi">Hindi (experimental)</option><option value="en">English</option></select></label>
+  <p class="err" id="setErr"></p>
+  <div class="row"><button class="btn primary" type="submit">Save</button><button class="btn" type="button" data-act="close">Cancel</button></div>
+  <p class="label">Start over</p>
+  <div class="row"><button class="btn danger" type="button" data-act="reset" id="btnReset">Erase everything and load the example shop</button></div>
+</form></dialog>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+<script>
+(function(){
+'use strict';
+var HAS_DOM=typeof document!=='undefined';
+var LS_KEY='voiceshop.v1';
+var S=null,pending=null,reply=null,log=[],undo=[],tab='bill',lowOnly=false,stockQ='',lastBill=null,openCust=null,editId=null,ready=false,idx=new Map();
+var gidN=0;
+function gid(){gidN++;return 'x'+Date.now().toString(36)+gidN.toString(36)+Math.random().toString(36).slice(2,6);}
+function r2(n){return Math.round(n*100)/100;} function r3(n){return Math.round(n*1000)/1000;}
+function rs(n){n=r2(Number(n)||0);return (n<0?'-':'')+'₹'+Math.abs(n).toLocaleString('en-IN',{maximumFractionDigits:2});}
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+function fmtQty(q,u){q=Number(q)||0;if(u==='kg')return Math.abs(q)<1?Math.round(q*1000)+' g':r3(q)+' kg';if(u==='l')return Math.abs(q)<1?Math.round(q*1000)+' ml':r3(q)+' L';return String(r3(q));}
+function per(u){return u==='kg'?'/kg':u==='l'?'/L':'';}
+
+/* ---------- starter shop (example data, clearly marked in the UI) ---------- */
+function starter(){
+  function I(name,unit,price,cost,stock,low,aliases,pack){return {id:gid(),name:name,unit:unit,price:price,cost:cost,stock:stock,low:low,aliases:aliases||[],pack:pack||0};}
+  function C(name,aliases,bal){return {id:gid(),name:name,aliases:aliases,balance:bal,ledger:bal?[{t:Date.now()-86400000*3,type:'udhaar',amt:bal,note:'Opening balance (example)'}]:[]};}
+  return {v:1,example:true,shop:{name:'My Kirana Store',upi:'',lang:'auto'},billNo:1,
+    items:[
+      I('Atta (loose)','kg',42,36,50,10,['atta','aata','flour','wheat flour']),
+      I('Chawal (rice)','kg',60,50,40,10,['chawal','chaval','rice']),
+      I('Cheeni (sugar)','kg',46,41,35,8,['cheeni','chini','sugar','shakkar']),
+      I('Toor Dal','kg',150,132,20,5,['dal','daal','toor dal','tur dal','arhar dal','arhar']),
+      I('Moong Dal','kg',120,104,15,5,['moong dal','mung dal','moong']),
+      I('Besan','kg',90,78,12,4,['besan','gram flour']),
+      I('Sarson Tel (loose)','l',160,146,25,6,['tel','oil','sarson tel','sarso tel','mustard oil','sarson ka tel']),
+      I('Fortune Oil 1 L','pcs',150,138,18,6,['fortune','fortune oil','fortune tel','refined oil','refined']),
+      I('Tata Salt 1 kg','pcs',28,24,30,8,['namak','salt','tata salt','tata namak']),
+      I('Amul Doodh 500 ml','pcs',34,31,24,10,['doodh','dudh','milk','amul doodh','amul milk','amul']),
+      I('Maggi','pcs',14,12,60,15,['maggi','maigi','megi','maggie','noodles'],48),
+      I('Parle-G','pcs',10,8.5,72,24,['parle g','parle','parleg','parle ji','biscuit','biskut'],24),
+      I('Surf Excel 1 kg','pcs',140,126,9,4,['surf','surf excel','sarf','detergent','washing powder']),
+      I('Colgate 100 g','pcs',65,57,14,5,['colgate','kolget','kolgate','kolaget','toothpaste','colgate chhota','colgate small']),
+      I('Colgate 200 g','pcs',120,106,6,3,['colgate','colgate bada','colgate big','toothpaste']),
+      I('Tata Tea 250 g','pcs',140,126,10,4,['chai patti','chaipatti','chai','tea','tata tea']),
+      I('Lux Sabun','pcs',35,30,3,6,['lux','sabun','soap']),
+      I('Anda (egg)','pcs',7,5.8,90,30,['anda','ande','egg','eggs'],30),
+      I('Bread','pcs',45,39,5,4,['bread','double roti']),
+      I('Haldi 100 g','pcs',35,29,11,4,['haldi','turmeric'])
+    ],
+    customers:[C('Sharma ji',['sharma'],1200),C('Verma ji',['verma','varma'],450),C('Gupta aunty',['gupta'],0)],
+    bills:[],expenses:[],draft:{lines:[],disc:0,pct:0},held:[]};
+}
+
+/* ---------- sanitise anything loaded from storage ---------- */
+function sanitize(d){
+  try{
+    if(!d||typeof d!=='object'||!Array.isArray(d.items))return null;
+    var str=function(x,n){return String(x==null?'':x).slice(0,n);};
+    var num=function(x,def){x=Number(x);return isFinite(x)?x:(def||0);};
+    var unit=function(u){return u==='kg'||u==='l'?u:'pcs';};
+    var draft=function(x){x=x||{};return {lines:(Array.isArray(x.lines)?x.lines:[]).slice(0,100).map(function(l){return {itemId:str(l.itemId,40),name:str(l.name,60),qty:num(l.qty,1),unit:unit(l.unit),price:num(l.price),cost:num(l.cost),amount:Math.max(0,num(l.amount))};}),disc:Math.max(0,num(x.disc)),pct:Math.min(100,Math.max(0,num(x.pct)))};};
+    var sh=d.shop||{};
+    return {v:1,example:!!d.example,
+      shop:{name:str(sh.name,60)||'My Shop',upi:str(sh.upi,80),lang:sh.lang==='hi'||sh.lang==='en'?sh.lang:'auto'},
+      billNo:Math.max(1,Math.floor(num(d.billNo,1))),
+      items:d.items.slice(0,1500).map(function(i){return {id:str(i.id,40)||gid(),name:str(i.name,60)||'Item',unit:unit(i.unit),price:Math.max(0,num(i.price)),cost:Math.max(0,num(i.cost)),stock:num(i.stock),low:Math.max(0,num(i.low)),aliases:(Array.isArray(i.aliases)?i.aliases:[]).slice(0,20).map(function(a){return str(a,40);}),pack:Math.max(0,num(i.pack))};}),
+      customers:(Array.isArray(d.customers)?d.customers:[]).slice(0,1500).map(function(c){return {id:str(c.id,40)||gid(),name:str(c.name,60)||'Customer',aliases:(Array.isArray(c.aliases)?c.aliases:[]).slice(0,10).map(function(a){return str(a,40);}),balance:num(c.balance),ledger:(Array.isArray(c.ledger)?c.ledger:[]).slice(-100).map(function(e){return {t:num(e.t),type:e.type==='jama'?'jama':'udhaar',amt:num(e.amt),note:str(e.note,80)};})};}),
+      bills:(Array.isArray(d.bills)?d.bills:[]).slice(-300).map(function(b){return {id:str(b.id,40)||gid(),no:num(b.no),t:num(b.t),disc:num(b.disc),total:num(b.total),mode:str(b.mode,10),cust:str(b.cust,60),lines:(Array.isArray(b.lines)?b.lines:[]).slice(0,100).map(function(l){return {name:str(l.name,60),qty:num(l.qty),unit:unit(l.unit),price:num(l.price),cost:num(l.cost),total:num(l.total)};})};}),
+      expenses:(Array.isArray(d.expenses)?d.expenses:[]).slice(-300).map(function(e){return {t:num(e.t),amt:num(e.amt),note:str(e.note,80)};}),
+      draft:draft(d.draft),held:(Array.isArray(d.held)?d.held:[]).slice(0,5).map(draft)};
+  }catch(e){return null;}
+}
+
+/* ---------- language: Devanagari to Latin, numbers, units ---------- */
+var DV_C={'क':'k','ख':'kh','ग':'g','घ':'gh','ङ':'n','च':'ch','छ':'chh','ज':'j','झ':'jh','ञ':'n','ट':'t','ठ':'th','ड':'d','ढ':'dh','ण':'n','त':'t','थ':'th','द':'d','ध':'dh','न':'n','प':'p','फ':'f','ब':'b','भ':'bh','म':'m','य':'y','र':'r','ल':'l','व':'w','श':'sh','ष':'sh','स':'s','ह':'h'};
+var DV_V={'अ':'a','आ':'aa','इ':'i','ई':'i','उ':'u','ऊ':'u','ए':'e','ऐ':'ai','ओ':'o','औ':'au','ऋ':'ri','ऑ':'o'};
+var DV_M={'ा':'a','ि':'i','ी':'i','ु':'u','ू':'u','े':'e','ै':'ai','ो':'o','ौ':'au','ृ':'ri','ॉ':'o'};
+function translit(s){
+  if(!/[ऀ-ॿ]/.test(s))return s;
+  s=s.replace(/़/g,'');var out='',i,c,nx;
+  for(i=0;i<s.length;i++){c=s[i];nx=s[i+1];
+    if(DV_C[c]){out+=DV_C[c];
+      if(nx&&DV_M[nx]){out+=DV_M[nx];i++;}
+      else if(nx==='्'){i++;}
+      else if(nx&&/[ऀ-ॿ]/.test(nx))out+='a';
+    }else if(DV_V[c])out+=DV_V[c];
+    else if(c==='ं'||c==='ँ')out+='n';
+    else if(c>='०'&&c<='९')out+=String(c.charCodeAt(0)-0x0966);
+    else if(/[ऀ-ॿ]/.test(c)){}
+    else out+=c;
+  }
+  return out;
+}
+var PHRASES=[[/\bkar (do|de|dena|dijiye|dijie)\b/g,'kardo'],[/\bhata (do|de|dena)\b/g,'hatao'],[/\bbata (do|de|dena|dijiye)\b/g,'batao'],[/\brok (do|de)\b/g,'hold'],[/\b(likh|laga|jod|de) (do|de|dena)\b/g,'daalo'],[/\bgoogle pay\b/g,'gpay'],[/\bphone pe\b/g,'phonepe']];
+function normalize(raw){
+  var s=translit(String(raw==null?'':raw).slice(0,400).toLowerCase());
+  s=s.replace(/₹/g,' rupaye ').replace(/%/g,' percent ').replace(/(\d),(?=\d)/g,'$1').replace(/(\d)(kg|gm|g|ml|ltr|l|rs|rupees?|rupaye)\b/g,'$1 $2').replace(/\brs\b\.?/g,' rupaye ').replace(/[^a-z0-9. ]+/g,' ').replace(/\.(?!\d)/g,' ').replace(/\s+/g,' ').trim();
+  for(var i=0;i<PHRASES.length;i++)s=s.replace(PHRASES[i][0],PHRASES[i][1]);
+  return s;
+}
+var NUM={ek:1,one:1,do:2,two:2,teen:3,tin:3,three:3,char:4,chaar:4,four:4,paanch:5,panch:5,five:5,chhe:6,che:6,chah:6,cheh:6,six:6,saat:7,sat:7,seven:7,aath:8,ath:8,eight:8,nau:9,nine:9,das:10,dus:10,ten:10,gyarah:11,eleven:11,barah:12,baarah:12,twelve:12,terah:13,chaudah:14,pandrah:15,fifteen:15,solah:16,satrah:17,atharah:18,unnis:19,bees:20,bis:20,twenty:20,pachees:25,pachis:25,tees:30,tis:30,thirty:30,chalis:40,chaalis:40,forty:40,pachas:50,pachaas:50,fifty:50,saath:60,sixty:60,sattar:70,seventy:70,assi:80,eighty:80,nabbe:90,ninety:90};
+var MULT={sau:100,hundred:100,hazaar:1000,hazar:1000,hajar:1000,hajaar:1000,thousand:1000};
+var FRAC={adha:0.5,aadha:0.5,half:0.5,dedh:1.5,derh:1.5,dhai:2.5,dhaai:2.5,quarter:0.25};
+var PREFIX={sawa:0.25,saadhe:0.5,sadhe:0.5,sade:0.5,saade:0.5,paune:-0.25};
+var UNIT={};
+(function(){function U(names,b,f,x){names.split(' ').forEach(function(n){UNIT[n]={b:b,f:f,pav:x==='pav',pack:x==='pack'};});}
+  U('kilo kilos kg kgs keji kejee kilogram kilograms','kg',1);U('gram grams gm g','kg',0.001);U('pav paav pao paw','kg',0.25,'pav');
+  U('litre liter litres liters ltr l litar','l',1);U('ml','l',0.001);
+  U('packet packets pkt paiket piece pieces pcs pc pis nag dana','pcs',1);U('dozen darjan','pcs',12);U('peti carton cartons box bora bori katta sack','pcs',1,'pack');})();
+function setOf(s){return new Set(s.split(' '));}
+var RUPEE=setOf('rupaye rupay rupees rupee rupae rupya rupiya rupaya');
+var KA=setOf('ka ke ki of worth wala wali wale');
+var STOP=setOf('rupaye rupay rupees rupee rupae rupya rupiya rupaya ka ke ki of worth wala wali wale de dena dedo dijiye chahiye bhai bhaiya please add aur and bhi lo likho daalo dalo bill mein me main hai he hain tha the to se ko ye yeh is isme also with plus i want need give put on in at for each kardo karo kar ji ab aaj abhi batao total kitna kitni kitne hua hue cash nakad nagad upi phonepe gpay paytm online qr scan card khaate khate khata khaata udhaar udhar credit ne diye diya given paid pay jama payment mile chukaye hatao remove nikalo nikal delete hata make set price daam dam rate bhav discount chhoot chhut chut off kam percent pratishat aayi aaya aaye aya ayi aye received recieved kharida kharide purchase purchased stock naya new item saman product toot tut tute toote tooti kharab damage damaged broken expired expire phenk chori waste wasted wapas vapas return returned bacha bachi bache left how much many gaye gaya gayi ho hogaya pura poora hoga hogi complete kanplit kamplit komplit final kaish yupiai bas itna');
+function isNumWord(t){return NUM[t]!==undefined||MULT[t]!==undefined||FRAC[t]!==undefined||PREFIX[t]!==undefined;}
+function readNumber(tk,i){
+  var t=tk[i];if(t===undefined)return null;
+  if(/^\d+(\.\d+)?$/.test(t)){var v=parseFloat(t),k=i+1;if(MULT[tk[k]]){v*=MULT[tk[k]];k++;}return {value:v,next:k};}
+  if(PREFIX[t]!==undefined){var r=PREFIX[tk[i+1]]===undefined?readNumber(tk,i+1):null;if(r)return {value:r.value+PREFIX[t],next:r.next};return {value:1+PREFIX[t],next:i+1};}
+  if(FRAC[t]!==undefined)return {value:FRAC[t],next:i+1};
+  if(NUM[t]===undefined&&MULT[t]===undefined)return null;
+  var total=0,cur=0,j=i,last='';
+  while(j<tk.length){var w=tk[j];
+    if(NUM[w]!==undefined){var nv=NUM[w];if(last===''||last==='m'||(last==='tens'&&nv<10)){cur+=nv;last=(nv>=20&&nv%10===0)?'tens':'n';}else break;}
+    else if(MULT[w]){cur=(cur||1)*MULT[w];if(MULT[w]===1000){total+=cur;cur=0;}last='m';}
+    else break;j++;}
+  return {value:total+cur,next:j};
+}
+function allNumbers(tk){var out=[],i=0;while(i<tk.length){var r=readNumber(tk,i);if(r){out.push(r.value);i=Math.max(r.next,i+1);}else i++;}return out;}
+function lev(a,b,max){if(Math.abs(a.length-b.length)>max)return max+1;var prev=[],i,j;for(j=0;j<=b.length;j++)prev[j]=j;
+  for(i=1;i<=a.length;i++){var cur=[i],mn=i;for(j=1;j<=b.length;j++){cur[j]=Math.min(prev[j]+1,cur[j-1]+1,prev[j-1]+(a[i-1]===b[j-1]?0:1));if(cur[j]<mn)mn=cur[j];}if(mn>max)return max+1;prev=cur;}
+  return prev[b.length];}
+
+/* ---------- catalogue + customer matching ---------- */
+function buildIndex(){idx=new Map();S.items.forEach(function(it){[it.name].concat(it.aliases||[]).forEach(function(a){var k=normalize(a);if(!k)return;if(!idx.has(k))idx.set(k,[]);if(idx.get(k).indexOf(it)<0)idx.get(k).push(it);});});}
+function matchItem(tk,i){
+  var len,p,hit;if(i>=tk.length)return null;
+  for(len=Math.min(4,tk.length-i);len>=1;len--){p=tk.slice(i,i+len).join(' ');hit=idx.get(p);if(hit)return {items:hit,len:len};}
+  for(len=Math.min(2,tk.length-i);len>=1;len--){
+    var part=tk.slice(i,i+len);if(part.some(function(w){return STOP.has(w)||isNumWord(w)||UNIT[w]||/\d/.test(w);}))continue;
+    p=part.join(' ');if(p.length<4)continue;var max=p.length>=7?2:1,best=null;
+    idx.forEach(function(v,k){var d=lev(k,p,max);if(d<=max&&(!best||d<best.d))best={items:v,len:len,d:d};});
+    if(best)return best;
+  }
+  return null;
+}
+function custKeys(c){var ks=[normalize(c.name).replace(/\b(ji|aunty|uncle|bhai|bhaiya|sir|madam)\b/g,'').replace(/\s+/g,' ').trim(),normalize(c.name)];(c.aliases||[]).forEach(function(a){ks.push(normalize(a));});return ks.filter(function(k,i){return k&&ks.indexOf(k)===i;});}
+function findCustomer(tk){
+  var best=null,i,len;
+  for(i=0;i<tk.length;i++)for(len=Math.min(2,tk.length-i);len>=1;len--){
+    var p=tk.slice(i,i+len).join(' ');if(len===1&&(p.length<3||STOP.has(p)||isNumWord(p)))continue;
+    for(var ci=0;ci<S.customers.length;ci++){var c=S.customers[ci],ks=custKeys(c);
+      for(var ki=0;ki<ks.length;ki++){if(ks[ki]===p)return {c:c,i:i,len:len};if(!best&&len===1&&p.length>=5&&ks[ki].length>=5&&lev(ks[ki],p,1)<=1)best={c:c,i:i,len:len};}}
+  }
+  return best;
+}
+function mkLine(item,alts,number,unit,amount){
+  var qty;
+  if(amount!=null&&item.price>0)qty=amount/item.price;
+  else{amount=null;
+    if(!unit)qty=number;else if(unit.pack)qty=number*(item.pack||(item.unit==='pcs'?12:25));
+    else if(unit.b===item.unit||unit.b==='pcs')qty=number*unit.f;
+    else if(item.unit==='pcs')qty=number;else qty=number*unit.f;}
+  qty=r3(qty);if(!(qty>0)||qty>100000)qty=1;
+  return {item:item,alts:alts,qty:qty,amount:amount!=null?r2(amount):0,pack:!!(unit&&unit.pack)};
+}
+function parseItems(tk){
+  var lines=[],unknown=[],stray=[],left=[],n=tk.length,i=0,guard=0;
+  while(i<n&&guard++<300){
+    var t=tk[i];if(STOP.has(t)){i++;continue;}
+    var number=1,unit=null,amount=null,had=false,num=readNumber(tk,i);
+    if(num){had=true;number=num.value;i=num.next;
+      var rup=RUPEE.has(tk[i]),j=rup?i+1:i;
+      if(KA.has(tk[j])&&(rup||(number>=5&&matchItem(tk,j+1)))){amount=number;i=j+1;}
+      else if(rup){stray.push(number);i=j;continue;}
+      else if(UNIT[tk[i]]){unit=UNIT[tk[i]];i++;if(unit.pav&&UNIT[tk[i]]&&UNIT[tk[i]].b==='kg'&&!UNIT[tk[i]].pav)i++;}
+    }else if(UNIT[t]&&UNIT[t].pav){had=true;unit=UNIT[t];i++;if(UNIT[tk[i]]&&UNIT[tk[i]].b==='kg'&&!UNIT[tk[i]].pav)i++;}
+    if(had)while(i<n&&STOP.has(tk[i]))i++;
+    var m=matchItem(tk,i);
+    if(m){var item=m.items[0];i+=m.len;
+      var sz=readNumber(tk,i),su=sz?UNIT[tk[sz.next]]:null;
+      if(sz&&su&&su.b!=='pcs'&&item.unit==='pcs'){
+        var want=String(sz.value);var pick=m.items.filter(function(x){return normalize(x.name).split(' ').indexOf(want)>=0;})[0];
+        if(pick)item=pick;i=sz.next+1;
+      }else if(!had&&sz){var k=sz.next,u=UNIT[tk[k]];
+        if(u||k>=n||(STOP.has(tk[k])&&!RUPEE.has(tk[k])&&!KA.has(tk[k]))){number=sz.value;unit=u||null;i=u?k+1:k;}
+      }
+      lines.push(mkLine(item,m.items.filter(function(x){return x!==item;}),number,unit,amount));
+    }else if(had){var nm=[];
+      while(i<n&&nm.length<4&&!STOP.has(tk[i])&&!UNIT[tk[i]]&&!readNumber(tk,i))nm.push(tk[i++]);
+      if(nm.length)unknown.push({name:nm.join(' '),number:number,unit:unit});else stray.push(amount!=null?amount:number);
+    }else{left.push(t);i++;}
+  }
+  return {lines:lines,unknown:unknown,stray:stray,left:left};
+}
+
+/* ---------- state helpers ---------- */
+function byId(id){for(var i=0;i<S.items.length;i++)if(S.items[i].id===id)return S.items[i];return null;}
+function custById(id){for(var i=0;i<S.customers.length;i++)if(S.customers[i].id===id)return S.customers[i];return null;}
+function lineTotal(l){return r2(l.amount>0?l.amount:l.qty*l.price);}
+function totals(){var sub=0;S.draft.lines.forEach(function(l){sub+=lineTotal(l);});sub=r2(sub);var disc=S.draft.pct>0?r2(sub*S.draft.pct/100):Math.min(sub,r2(S.draft.disc||0));return {sub:sub,disc:disc,total:Math.max(0,r2(sub-disc))};}
+function pushUndo(){undo.push(JSON.stringify(S));if(undo.length>25)undo.shift();}
+function title(s){return String(s).replace(/\b[a-z]/g,function(c){return c.toUpperCase();});}
+function sameDay(t){var a=new Date(t),b=new Date();return a.getFullYear()===b.getFullYear()&&a.getMonth()===b.getMonth()&&a.getDate()===b.getDate();}
+function lowItems(){return S.items.filter(function(i){return i.stock<=i.low;});}
+function addToDraft(pl){
+  var ex=null;if(!(pl.amount>0))S.draft.lines.forEach(function(l){if(l.itemId===pl.item.id&&!(l.amount>0))ex=l;});
+  if(ex){ex.qty=r3(ex.qty+pl.qty);return ex;}
+  var l={itemId:pl.item.id,name:pl.item.name,qty:pl.qty,unit:pl.item.unit,price:pl.item.price,cost:pl.item.cost,amount:pl.amount||0};S.draft.lines.push(l);return l;
+}
+function describe(pl){return fmtQty(pl.qty,pl.item.unit)+' '+pl.item.name;}
+function completeBill(mode,cust){
+  var t=totals(),now=Date.now();
+  var bill={id:gid(),no:S.billNo,t:now,disc:t.disc,total:t.total,mode:mode,cust:cust?cust.name:'',lines:S.draft.lines.map(function(l){return {name:l.name,qty:l.qty,unit:l.unit,price:l.price,cost:l.cost,total:lineTotal(l)};})};
+  S.billNo++;
+  S.draft.lines.forEach(function(l){var it=byId(l.itemId);if(it)it.stock=r3(it.stock-l.qty);});
+  if(mode==='udhaar'&&cust){cust.balance=r2(cust.balance+t.total);cust.ledger.push({t:now,type:'udhaar',amt:t.total,note:'Bill #'+bill.no});}
+  S.bills.push(bill);if(S.bills.length>300)S.bills=S.bills.slice(-300);
+  S.draft={lines:[],disc:0,pct:0};lastBill=bill;return bill;
+}
+function todayReport(){
+  var r={n:0,sales:0,cash:0,upi:0,card:0,udhaar:0,profit:0,exp:0,top:{}};
+  S.bills.forEach(function(b){if(!sameDay(b.t))return;r.n++;r.sales+=b.total;if(r[b.mode]!==undefined)r[b.mode]+=b.total;
+    var cost=0;b.lines.forEach(function(l){cost+=l.cost*l.qty;r.top[l.name]=(r.top[l.name]||0)+l.total;});r.profit+=b.total-cost;});
+  S.expenses.forEach(function(e){if(sameDay(e.t))r.exp+=e.amt;});
+  r.profit=r2(r.profit-r.exp);r.sales=r2(r.sales);return r;
+}
+function billText(b){
+  var out=[S.shop.name,'Bill #'+b.no+'  '+new Date(b.t).toLocaleString('en-IN'),'--------------------------'];
+  b.lines.forEach(function(l){out.push(l.name+'  '+fmtQty(l.qty,l.unit)+'  '+rs(l.total));});
+  out.push('--------------------------');if(b.disc>0)out.push('Discount: -'+rs(b.disc));
+  out.push('TOTAL: '+rs(b.total));out.push('Paid by: '+(b.mode==='udhaar'?'Udhaar ('+b.cust+')':b.mode.toUpperCase()));out.push('Dhanyavaad!');return out.join('\n');
+}
+
+/* ---------- the command handler ---------- */
+var YES=/^(haan|han|ha|haa|yes|ok|okay|theek|thik|sahi|confirm|done|hogaya|aa gaya|mil gaya)\b/;
+var NO=/^(nahi|nahin|no|na|cancel|ruko|mat|chhodo|chodo)\b/;
+var HELP='You can say: "do kilo atta, ek maggi" to bill · "maggi teen kar do" · "surf hatao" · "20 rupaye kam karo" · "cash, 500 diye" · "UPI" · "Sharma ji ke khaate mein" · "Verma ji ne 500 diye" · "50 maggi aayi" · "atta kitna bacha hai" · "aaj kitna bika" · "undo".';
+var A_YESNO=[{label:'Yes, confirm',run:'yes',primary:true},{label:'No',run:'no'}];
+function setReply(heard,text,tone,actions,qr){reply={heard:heard,text:text,tone:tone||'ok',actions:actions||[],qr:qr||''};log.unshift({heard:heard,text:text});if(log.length>6)log.pop();}
+function handle(raw){
+  var heard=String(raw==null?'':raw).trim().slice(0,300);if(!heard||!S)return;
+  buildIndex();
+  var text=normalize(heard),tokens=text?text.split(' '):[];
+  function R(t,tone,actions,qr){setReply(heard,t,tone,actions,qr);finish();}
+  if(!tokens.length)return R('Could not understand that. Please try again.','err');
+  if(pending){var p=pending;pending=null;
+    if(p.type==='confirm'){if(YES.test(text))return p.yes(R);if(NO.test(text))return R('Cancelled. Nothing was changed.','warn');}
+    else if(p.type==='price'){var pn=allNumbers(tokens);if(NO.test(text))return R('Skipped "'+p.name+'".','warn');
+      if(pn.length&&pn[0]>0&&pn[0]<=1000000){pushUndo();var ni={id:gid(),name:title(p.name).slice(0,60),unit:'pcs',price:r2(pn[0]),cost:0,stock:0,low:0,aliases:[p.name],pack:0};S.items.push(ni);addToDraft(mkLine(ni,[],p.number,null,null));
+        return R('Added new item "'+ni.name+'" at '+rs(ni.price)+'. Total '+rs(totals().total)+'. Fill in its stock in the Stock tab.','ok');}}
+    else if(p.type==='customer'){if(NO.test(text))return R('Cancelled. The bill is still open.','warn');
+      var f0=findCustomer(tokens);if(f0)return askCredit(f0.c.id,'',R);
+      var nm0=tokens.filter(function(w){return !STOP.has(w)&&!isNumWord(w);}).join(' ');if(nm0)return askCredit('',title(nm0).slice(0,60),R);
+      return R('Please say or type the customer name.','warn');}
+  }
+  if(/\b(undo|galat)\b/.test(text)||/^(wapas|vapas) (karo|lo)\b/.test(text))return doUndo(R);
+  if(/\b(help|madad)\b|kya bol/.test(text))return R(HELP);
+  if(/\b(resume|kholo)\b|pichh?la bill/.test(text)){if(!S.held.length)return R('No bill is on hold.','warn');if(S.draft.lines.length)return R('Finish or hold the current bill first.','warn');pushUndo();S.draft=S.held.pop();tab='bill';return R('Held bill opened. Total '+rs(totals().total)+'.');}
+  if(/\bhold\b|bill rok/.test(text)){if(!S.draft.lines.length)return R('There is no open bill to hold.','warn');if(S.held.length>=5)return R('5 bills are already on hold. Finish one first.','warn');pushUndo();S.held.push(S.draft);S.draft={lines:[],disc:0,pct:0};return R('Bill kept on hold. Say "pichhla bill kholo" to bring it back.');}
+  if(/^(cancel|chhodo|chodo|clear)\b|\bbill (cancel|clear|hatao)\b|\b(naya|new) bill\b/.test(text)){if(!S.draft.lines.length)return R('The bill is already empty.','warn');pushUndo();S.draft={lines:[],disc:0,pct:0};return R('Bill cleared.','warn');}
+
+  var cf=findCustomer(tokens),hasCredit=/\b(khaate|khate|khata|khaata|udhaar|udhar|credit)\b/.test(text);
+  var itoks=tokens;if(cf){itoks=tokens.slice(0,cf.i).concat(tokens.slice(cf.i+cf.len));}
+  if(/\b(baaki|baki|bakaya|balance|owe|owes)\b/.test(text)){tab='khata';
+    if(cf)return R(cf.c.name+' ka baaki: '+rs(cf.c.balance)+'.');
+    var out=0;S.customers.forEach(function(c){if(c.balance>0)out+=c.balance;});return R('Total udhaar outstanding: '+rs(out)+'.');}
+  if(cf&&!hasCredit&&/\b(jama|paid|pay|diye|diya|chukaye|payment|mile)\b/.test(text)){
+    var pa=allNumbers(itoks)[0];
+    if(pa>0&&pa<=10000000){var cid=cf.c.id,amt=r2(pa);
+      pending={type:'confirm',yes:function(R2){var c=custById(cid);if(!c)return R2('Customer not found.','err');pushUndo();c.balance=r2(c.balance-amt);c.ledger.push({t:Date.now(),type:'jama',amt:amt,note:'Payment received'});tab='khata';return R2(c.name+' paid '+rs(amt)+'. Baaki now '+rs(c.balance)+'.');}};
+      return R(cf.c.name+' ne '+rs(amt)+' diye? Baaki will go from '+rs(cf.c.balance)+' to '+rs(cf.c.balance-amt)+'.','warn',A_YESNO);}
+  }
+  if(/\b(hisaab|hisab|report|bikri|sales?|bika|munafa|profit|kamai)\b/.test(text)){var rp=todayReport();tab='report';
+    return R('Today: '+rp.n+' bills, '+rs(rp.sales)+' sales. Cash '+rs(rp.cash)+', UPI '+rs(rp.upi)+', udhaar '+rs(rp.udhaar)+'. Estimated profit '+rs(rp.profit)+'. '+lowItems().length+' items are running low.');}
+  if(/\b(mangwana|mangana|mangwani|reorder|khatam)\b|low stock/.test(text)){var lw=lowItems();tab='stock';lowOnly=true;
+    return R(lw.length?'Order these: '+lw.slice(0,8).map(function(i){return i.name+' ('+fmtQty(i.stock,i.unit)+' left)';}).join(', ')+(lw.length>8?' and '+(lw.length-8)+' more.':'.'):'Nothing is running low right now.',lw.length?'warn':'ok');}
+  if(/\b(kharcha|kharch|expense|bijli|kiraya|rent|salary|tankhwah|bhada)\b/.test(text)){var ea=allNumbers(tokens)[0];
+    if(ea>0&&ea<=10000000){pushUndo();S.expenses.push({t:Date.now(),amt:r2(ea),note:heard.slice(0,80)});if(S.expenses.length>300)S.expenses=S.expenses.slice(-300);return R('Expense of '+rs(ea)+' recorded.');}
+    return R('How much was the expense? Say it with the amount, like "bijli ka bill 1200".','warn');}
+  if(/\b(naya|new|add) (item|saman|product)\b|item jodo/.test(text))return newItem(tokens,R);
+
+  var pi=parseItems(itoks),L=pi.lines;
+  if(L.length&&!/\b(hua|hue)\b/.test(text)&&(/\b(kitna|kitni|kitne)\b.*\b(bacha|bachi|bache|stock|hai)\b/.test(text)||/\bhow (much|many)\b|\bleft\b|\bstock (check|batao|kitna)\b/.test(text))){
+    var si=L[0].item;return R(si.name+': '+fmtQty(si.stock,si.unit)+' in stock'+(si.stock<=si.low?' (low).':'.'),si.stock<=si.low?'warn':'ok');}
+  if(/\b(aayi|aaya|aaye|aya|ayi|aye|received|recieved|kharida|kharide|purchased?)\b|\bstock in\b/.test(text)){
+    if(!L.length)return R('Which item came in? Say it like "50 maggi aayi".','warn');
+    pushUndo();L.forEach(function(l){l.item.stock=r3(l.item.stock+l.qty);});
+    if(L.length===1&&pi.stray.length&&pi.stray[0]>0){var cst=pi.stray[0];if(L[0].pack)cst=cst/(L[0].item.pack||12);L[0].item.cost=r2(cst);}
+    tab='stock';return R('Stock added: '+L.map(function(l){return describe(l)+' (now '+fmtQty(l.item.stock,l.item.unit)+')';}).join(', ')+'.');}
+  if(/\b(toot|tut|tute|toote|tooti|kharab|damaged?|broken|expired?|phenk|chori|wasted?)\b/.test(text)){
+    if(!L.length)return R('Which item? Say it like "3 anda toot gaye".','warn');
+    pushUndo();L.forEach(function(l){l.item.stock=r3(l.item.stock-l.qty);});tab='stock';
+    return R('Stock reduced: '+L.map(function(l){return describe(l)+' (now '+fmtQty(l.item.stock,l.item.unit)+')';}).join(', ')+'.','warn');}
+  if(/\b(wapas|vapas|return|returned)\b/.test(text)){
+    if(!L.length)return R('Which item came back? Say it like "ek maggi wapas".','warn');
+    pushUndo();var ref=0,now=Date.now();L.forEach(function(l){l.item.stock=r3(l.item.stock+l.qty);ref+=l.amount>0?l.amount:l.qty*l.item.price;});ref=r2(ref);
+    S.bills.push({id:gid(),no:S.billNo++,t:now,disc:0,total:-ref,mode:'cash',cust:'',lines:L.map(function(l){return {name:l.item.name+' (return)',qty:-l.qty,unit:l.item.unit,price:l.item.price,cost:l.item.cost,total:-r2(l.amount>0?l.amount:l.qty*l.item.price)};})});
+    return R('Return recorded: '+L.map(describe).join(', ')+'. Give back '+rs(ref)+'. Stock updated.','warn');}
+  if((/\b(price|daam|dam|rate|bhav)\b/.test(text)||/\bka (kardo|hai|karo)\b/.test(text))&&L.length&&pi.stray.length&&pi.stray[0]>0&&pi.stray[0]<=1000000){
+    var pid=L[0].item.id,np=r2(pi.stray[0]);
+    pending={type:'confirm',yes:function(R2){var it=byId(pid);if(!it)return R2('Item not found.','err');pushUndo();it.price=np;return R2(it.name+' price is now '+rs(np)+per(it.unit)+'.');}};
+    return R('Change '+L[0].item.name+' price from '+rs(L[0].item.price)+' to '+rs(np)+'?','warn',A_YESNO);}
+  if(/\b(discount|chhoot|chhut|chut|off)\b|\bkam (kardo|karo)\b/.test(text)){var dn=allNumbers(tokens)[0];
+    if(!S.draft.lines.length)return R('Add items before giving a discount.','warn');
+    if(!(dn>0))return R('How much discount? Say "20 rupaye kam karo" or "10 percent discount".','warn');
+    pushUndo();if(/\b(percent|pratishat)\b/.test(text)){S.draft.pct=Math.min(100,dn);S.draft.disc=0;}else{S.draft.disc=r2(dn);S.draft.pct=0;}
+    var td=totals();return R('Discount '+rs(td.disc)+' applied. Total '+rs(td.total)+'.');}
+  if(/\b(hatao|remove|nikalo|nikal|delete|hata)\b/.test(text)){
+    if(!L.length)return R('Which item should be removed?','warn');
+    var gone=[];pushUndo();L.forEach(function(l){var before=S.draft.lines.length;S.draft.lines=S.draft.lines.filter(function(d){return d.itemId!==l.item.id;});if(S.draft.lines.length<before)gone.push(l.item.name);});
+    if(!gone.length){undo.pop();return R(L[0].item.name+' is not in this bill.','warn');}
+    return R('Removed '+gone.join(', ')+'. Total '+rs(totals().total)+'.','warn');}
+
+  var mode=hasCredit?'udhaar':/\b(upi|yupiai|phonepe|gpay|paytm|online|qr|scan)\b/.test(text)?'upi':/\b(cash|kaish|nakad|nagad)\b/.test(text)?'cash':/\bcard\b/.test(text)?'card':/\b(complete|kanplit|kamplit|komplit|final)\b|\bbill (banao|bana|kardo)\b|\bbas itna\b/.test(text)?'ask':'';
+  var setQty=!mode&&/\b(kardo|karo|make|set)\b/.test(text);
+  var added=[],acts=[],changed=false,didSet=false;
+  if(L.length){pushUndo();changed=true;
+    L.forEach(function(l){
+      if(setQty){var ex=null;S.draft.lines.forEach(function(d){if(d.itemId===l.item.id)ex=d;});if(ex){ex.qty=l.qty;ex.amount=0;didSet=true;added.push(describe(l));return;}}
+      addToDraft(l);added.push(describe(l));
+      if(l.alts.length&&acts.length<3)acts.push({label:'Change to '+l.alts[0].name,swap:l.item.id+'|'+l.alts[0].id});
+    });}
+  var msg=added.length?(didSet?'Updated: ':'Added ')+added.join(', ')+'. ':'';
+  if(pi.unknown.length){var u0=pi.unknown[0];pending={type:'price',name:u0.name,number:u0.number};tab='bill';
+    return R(msg+'"'+u0.name+'" is not in your item list. Daam bataiye (say the price), or say "no" to skip.','warn');}
+  if(mode){
+    if(!S.draft.lines.length){if(changed)undo.pop();return R('The bill is empty. Add items first.','warn');}
+    var tt=totals();tab='bill';
+    if(mode==='ask')return R(msg+'Total '+rs(tt.total)+'. Payment kaise? Say cash, UPI or udhaar.','warn',[{label:'Cash',run:'cash',primary:true},{label:'UPI',run:'upi',primary:true},{label:'Udhaar',run:'udhaar',primary:true}]);
+    if(mode==='udhaar'){if(cf)return askCredit(cf.c.id,'',R,msg);
+      pending={type:'customer'};return R(msg+'Whose khata? Say or tap the customer name.','warn',S.customers.slice(0,6).map(function(c){return {label:c.name,run:c.name};}));}
+    if(mode==='upi'){
+      pending={type:'confirm',yes:function(R2){if(!S.draft.lines.length)return R2('The bill is empty.','warn');pushUndo();var b=completeBill('upi',null);return R2('Bill #'+b.no+' done. '+rs(b.total)+' received by UPI. Stock updated.');}};
+      var okUpi=/^[a-z0-9._-]{2,}@[a-z0-9.-]{2,}$/i.test(S.shop.upi);
+      return R(msg+'Collect '+rs(tt.total)+' by UPI.'+(okUpi?' Customer can scan this QR.':' Add your UPI ID in Settings to show a QR here.')+' Confirm when the money arrives.','warn',[{label:'Payment received',run:'yes',primary:true},{label:'Cancel',run:'no'}],okUpi?'upi://pay?pa='+encodeURIComponent(S.shop.upi)+'&pn='+encodeURIComponent(S.shop.name)+'&am='+tt.total.toFixed(2)+'&cu=INR':'');}
+    var given=mode==='cash'?pi.stray[0]:0;
+    if(given>0&&given<tt.total)return R(msg+'Total is '+rs(tt.total)+' but only '+rs(given)+' was given. '+rs(tt.total-given)+' is still needed.','warn');
+    if(!changed)pushUndo();var b=completeBill(mode,null);
+    return R('Bill #'+b.no+' done. '+rs(b.total)+' by '+mode+'.'+(given>0?' '+rs(given)+' diye, '+rs(given-b.total)+' wapas dena hai.':'')+' Stock updated.');
+  }
+  if(added.length){tab='bill';return R(msg+'Total '+rs(totals().total)+'.'+(pi.left.length?' (Did not catch: '+pi.left.slice(0,4).join(' ')+')':''),'ok',acts);}
+  if(/\btotal\b|\bkitna (hua|ho)\b|\bkitne hue\b/.test(text)){tab='bill';return R(S.draft.lines.length?'Total '+rs(totals().total)+' for '+S.draft.lines.length+' items.':'The bill is empty.');}
+  return R('Did not understand "'+heard+'". Try: "do kilo atta, ek maggi" or say "help".','err');
+}
+function askCredit(cid,newName,R,prefix){
+  var t=totals();if(!S.draft.lines.length)return R('The bill is empty. Add items first.','warn');
+  var c=cid?custById(cid):null,name=c?c.name:newName,bal=c?c.balance:0;
+  pending={type:'confirm',yes:function(R2){if(!S.draft.lines.length)return R2('The bill is empty.','warn');pushUndo();var cu=cid?custById(cid):null;
+    if(!cu){cu={id:gid(),name:newName,aliases:[],balance:0,ledger:[]};S.customers.push(cu);}
+    var b=completeBill('udhaar',cu);return R2('Bill #'+b.no+' done. '+rs(b.total)+' added to '+cu.name+' khata. Baaki now '+rs(cu.balance)+'.');}};
+  return R((prefix||'')+(c?'':'New customer. ')+name+': '+rs(t.total)+' khaate mein. Pehle ka baaki '+rs(bal)+', kul '+rs(bal+t.total)+'. Theek hai?','warn',A_YESNO);
+}
+function newItem(tokens,R){
+  var i=0;while(i<tokens.length&&!/^(item|saman|product|jodo)$/.test(tokens[i]))i++;i++;
+  var name=[];while(i<tokens.length&&!readNumber(tokens,i)&&name.length<6){if(!RUPEE.has(tokens[i]))name.push(tokens[i]);i++;}
+  var price=0,stock=0,size='',plain=[];
+  while(i<tokens.length){var r=readNumber(tokens,i);if(!r){i++;continue;}var k=r.next,u=UNIT[tokens[k]];
+    if(RUPEE.has(tokens[k])){if(!price)price=r.value;i=k+1;}
+    else if(u&&u.b==='pcs'){stock=r.value*(u.pack?1:u.f);i=k+1;}
+    else if(u){size=r.value+' '+(u.b==='kg'?(u.f===1?'kg':'g'):(u.f===1?'L':'ml'));i=k+1;}
+    else{plain.push(r.value);i=Math.max(k,i+1);}}
+  if(!price&&plain.length)price=plain.shift();if(!stock&&plain.length)stock=plain.shift();
+  if(!name.length)return R('Say the item name and price, like "naya item Kurkure 20 rupaye 30 piece".','warn');
+  if(!(price>0)||price>1000000)return R('What is the price of '+title(name.join(' '))+'? Say it again with the price.','warn');
+  pushUndo();var it={id:gid(),name:(title(name.join(' '))+(size?' '+size:'')).slice(0,60),unit:'pcs',price:r2(price),cost:0,stock:r3(Math.min(stock,1000000)),low:0,aliases:[name.join(' ')],pack:0};
+  S.items.push(it);tab='stock';return R('New item added: '+it.name+' at '+rs(it.price)+', stock '+fmtQty(it.stock,'pcs')+'. Tap it in Stock to add more details.');
+}
+function doUndo(R){if(!undo.length)return R('Nothing to undo.','warn');var prev=sanitize(JSON.parse(undo.pop()));if(prev)S=prev;pending=null;lastBill=null;return R('Last change undone.','warn');}
+function finish(){persist();if(HAS_DOM)render();}
+
+/* ---------- storage: private cloud doc per signed-in person, device copy as fallback ---------- */
+var ref=null,saveTimer=null,saving=false,dirty=false,retries=0,statusKind='load';
+function setStatus(k){statusKind=k;if(!HAS_DOM)return;var el=document.getElementById('saveStatus');if(!el)return;
+  var m={load:['Loading your shop…',''],cloud:['Saved privately to your account','ok'],device:['Saved on this device only',''],saving:['Saving…',''],error:['Not saved. Check your connection','bad']}[k];
+  el.textContent=m[0];el.className='pill '+m[1];}
+function lsGet(){try{var v=localStorage.getItem(LS_KEY);return v?sanitize(JSON.parse(v)):null;}catch(e){return null;}}
+function lsSet(){try{localStorage.setItem(LS_KEY,JSON.stringify(S));}catch(e){}}
+function persist(){if(!HAS_DOM||!S)return;lsSet();if(!ref){setStatus('device');return;}dirty=true;setStatus('saving');clearTimeout(saveTimer);saveTimer=setTimeout(flush,700);}
+function flush(){
+  if(saving||!dirty||!ref)return;saving=true;dirty=false;
+  var body;try{body=JSON.parse(JSON.stringify(S));}catch(e){saving=false;setStatus('error');return;}
+  ref.set(body).then(function(){retries=0;saving=false;if(dirty){saveTimer=setTimeout(flush,400);}else setStatus('cloud');},
+    function(e){saving=false;if(e&&e.code==='unavailable'&&retries<3){retries++;dirty=true;saveTimer=setTimeout(flush,1500*retries);}else{setStatus('error');}});
+}
+function timeout(p,ms){return new Promise(function(res,rej){var t=setTimeout(function(){rej({code:'timeout'});},ms);p.then(function(v){clearTimeout(t);res(v);},function(e){clearTimeout(t);rej(e);});});}
+function initStore(){
+  var local=lsGet(),C=window.claude;
+  function useLocal(){S=local||starter();ref=null;ready=true;setStatus('device');boot2();}
+  if(!C||typeof C.use!=='function')return useLocal();
+  Promise.all([C.use('db'),C.use('user')]).then(function(r){
+    var db=r[0],user=r[1];if(!db||!user)return useLocal();
+    return Promise.resolve(user.id()).then(function(uid){
+      if(!uid)return useLocal();
+      var docRef=db.doc('data/users/'+uid+'/shop');
+      return timeout(docRef.get(),10000).then(function(snap){
+        var cloud=snap&&snap.exists?sanitize(snap.data()):null;
+        S=cloud||local||starter();ref=docRef;ready=true;boot2();
+        if(cloud)setStatus('cloud');else persist();
+      });
+    });
+  }).catch(function(){if(!ready)useLocal();});
+}
+
+/* ---------- voice ---------- */
+var dict=null,buf='',autoT=null;
+function flushVoice(){clearTimeout(autoT);var t=buf.trim();buf='';var lv=document.getElementById('live');if(lv)lv.textContent='';if(t&&ready)handle(t);}
+function micUI(state,msg){
+  var b=document.getElementById('mic'),t=document.getElementById('micTitle'),h=document.getElementById('micHint');
+  if(!dict){b.hidden=true;t.textContent='Type a command';h.textContent=msg||'Voice works in Chrome or the Claude desktop app. Here you can type instead.';return;}
+  b.hidden=false;var on=state&&state!=='idle';b.classList.toggle('on',!!on);
+  t.textContent=state==='listening'?'Listening…':state==='starting'?'Starting…':state==='finishing'?'Finishing…':'Tap to talk';
+  h.textContent=msg||(on?'Keep talking. Each command runs by itself when you pause. Tap to stop.':'Tap once, then just talk. No need to press Send.');
+}
+function initVoice(){
+  var C=window.claude;if(!C||typeof C.use!=='function')return micUI();
+  C.use('dictation').then(function(d){
+    dict=d||null;if(!dict)return micUI();
+    dict.onPartial(function(e){var pt=(e&&e.text)||'';if(pt)clearTimeout(autoT);document.getElementById('live').textContent=(buf+' '+pt).trim();});
+    dict.onFinal(function(e){buf+=(e&&e.text)||'';document.getElementById('live').textContent=buf.trim();clearTimeout(autoT);if(buf.trim())autoT=setTimeout(flushVoice,1400);});
+    dict.onState(function(e){var st=e&&e.state;var msg='';
+      if(st==='idle'){var why=e.reason;
+        if(why==='not_granted')msg='Voice is switched off for this page. You can type instead.';
+        else if(why==='rate_limited')msg='Voice is busy. Try again in a moment.';
+        else if(why==='upstream_error'||why==='unavailable')msg='Voice did not work this time. Try again or type.';
+        flushVoice();}
+      micUI(st,msg);});
+    micUI('idle');
+  },function(){micUI();});
+}
+function micClick(){
+  if(!dict||!ready)return;
+  if(dict.active()){dict.stop().then(flushVoice,function(){});return;}
+  buf='';var lang=S.shop.lang,opts=lang==='hi'?{language:'hi'}:lang==='en'?{language:'en'}:undefined;
+  dict.start(opts).catch(function(err){var c=err&&err.code;
+    micUI('idle',c==='not_granted'?'Voice permission was not given. You can type instead.':c==='unavailable'&&opts?'This voice language is not available. Change it in Settings.':c==='dismissed'||c==='stopped'?'':'Voice could not start. Try again or type.');});
+}
+
+/* ---------- rendering ---------- */
+var CHIPS=['do kilo atta, ek surf, teen maggi','100 rupaye ka tel','maggi do kar do','cash, 500 diye','Sharma ji ke khaate mein','Verma ji ne 200 diye','atta kitna bacha hai','50 maggi aayi','aaj kitna bika','kya mangwana hai'];
+function el(id){return document.getElementById(id);}
+function render(){
+  if(!ready)return;
+  el('shopName').textContent=S.shop.name;
+  el('btnUndo').disabled=!undo.length;
+  ['bill','stock','khata','report'].forEach(function(t){el('tab-'+t).setAttribute('aria-selected',t===tab?'true':'false');});
+  var rp='';
+  if(reply){rp='<div class="reply '+(reply.tone==='ok'?'':esc(reply.tone))+'"><span class="heard">“'+esc(reply.heard)+'”</span><span class="said">'+esc(reply.text)+'</span>';
+    if(reply.qr&&typeof qrcode==='function'){try{var q=qrcode(0,'M');q.addData(reply.qr);q.make();rp+='<div class="qr">'+q.createSvgTag({cellSize:4,margin:2})+'</div>';}catch(e){}}
+    if(reply.actions.length){rp+='<div class="acts">';reply.actions.forEach(function(a){rp+=a.swap?'<button type="button" class="btn small" data-act="swap" data-swap="'+esc(a.swap)+'">'+esc(a.label)+'</button>':'<button type="button" class="btn small'+(a.primary?' primary':'')+'" data-act="run" data-run="'+esc(a.run)+'">'+esc(a.label)+'</button>';});rp+='</div>';}
+    rp+='</div>';}
+  el('reply').innerHTML=rp;
+  el('logBox').hidden=log.length<2;
+  el('log').innerHTML=log.slice(1).map(function(l){return '<li><span>›</span><span><b>'+esc(l.heard)+'</b> — '+esc(l.text.length>90?l.text.slice(0,90)+'…':l.text)+'</span></li>';}).join('');
+  var p=el('panel');
+  if(tab==='bill')p.innerHTML=viewBill();else if(tab==='stock'){p.innerHTML=viewStock();renderStockList();}else if(tab==='khata')p.innerHTML=viewKhata();else p.innerHTML=viewReport();
+}
+function viewBill(){
+  var d=S.draft,t=totals(),h='';
+  if(S.example)h+='<div class="note"><span>This is an <b>example shop</b>: sample items, prices, stock and three sample customers so you can try commands. Change them in Stock and Khata, or erase everything in Settings.</span><button type="button" class="btn small" data-act="dismiss">OK</button></div>';
+  h+='<div class="receipt"><div class="rhead"><span>'+esc(S.shop.name)+'</span><span>Bill #'+S.billNo+'</span></div>';
+  if(!d.lines.length)h+='<p class="empty">No items in this bill yet. Say or type the items, for example <b>do kilo atta, ek maggi</b>.</p>';
+  else{h+='<ul class="lines">';d.lines.forEach(function(l,i){
+    h+='<li><div class="ln"><span class="nm">'+esc(l.name)+'</span><span class="rate">'+esc(fmtQty(l.qty,l.unit))+' × '+rs(l.price)+per(l.unit)+'</span></div><div class="lq"><button type="button" class="sq" data-act="qty" data-i="'+i+'" data-d="-1" aria-label="Less '+esc(l.name)+'">−</button><button type="button" class="sq" data-act="qty" data-i="'+i+'" data-d="1" aria-label="More '+esc(l.name)+'">+</button><span class="amt">'+rs(lineTotal(l))+'</span><button type="button" class="sq x" data-act="del" data-i="'+i+'" aria-label="Remove '+esc(l.name)+'">×</button></div></li>';});h+='</ul>';
+    if(t.disc>0)h+='<div class="tot"><span>Subtotal</span><span>'+rs(t.sub)+'</span></div><div class="tot"><span>Discount'+(d.pct>0?' ('+r2(d.pct)+'%)':'')+'</span><span>-'+rs(t.disc)+'</span></div>';}
+  h+='<div class="tot big"><span>Total</span><span>'+rs(t.total)+'</span></div></div>';
+  var dis=d.lines.length?'':' disabled';
+  h+='<div class="pay"><button type="button" class="btn primary" data-act="run" data-run="cash"'+dis+'>Cash</button><button type="button" class="btn primary" data-act="run" data-run="upi"'+dis+'>UPI</button><button type="button" class="btn primary" data-act="run" data-run="udhaar"'+dis+'>Udhaar</button></div>';
+  h+='<div class="row"><button type="button" class="btn small" data-act="run" data-run="hold"'+dis+'>Hold bill</button>'+(S.held.length?'<button type="button" class="btn small" data-act="run" data-run="resume">Open held bill ('+S.held.length+')</button>':'')+'<button type="button" class="btn small danger" data-act="run" data-run="cancel"'+dis+'>Clear bill</button></div>';
+  if(lastBill)h+='<h2>Last bill #'+lastBill.no+' · '+rs(lastBill.total)+'</h2><div class="row"><button type="button" class="btn small" data-act="copyBill">Copy bill text for WhatsApp</button></div><textarea class="copy" id="billCopy" readonly hidden aria-label="Bill text"></textarea>';
+  return h;
+}
+function stockTag(i){return i.stock<=0?'<span class="tag out">Out</span>':i.stock<=i.low?'<span class="tag low">Low</span>':'';}
+function viewStock(){
+  return '<div class="row"><input class="field grow" id="stockSearch" type="search" placeholder="Search items" aria-label="Search items" value="'+esc(stockQ)+'"><button type="button" class="btn small'+(lowOnly?' primary':'')+'" data-act="lowOnly" aria-pressed="'+lowOnly+'">Low stock only</button><button type="button" class="btn small" data-act="newItem">Add item</button></div><ul class="list" id="stockList"></ul>';
+}
+function renderStockList(){
+  var q=normalize(stockQ),ul=el('stockList');if(!ul)return;
+  var items=S.items.filter(function(i){if(lowOnly&&i.stock>i.low)return false;if(!q)return true;return normalize(i.name+' '+(i.aliases||[]).join(' ')).indexOf(q)>=0;});
+  ul.innerHTML=items.length?items.map(function(i){return '<li><button type="button" class="rowbtn" data-act="editItem" data-id="'+esc(i.id)+'"><span class="l"><b>'+esc(i.name)+stockTag(i)+'</b><small>'+rs(i.price)+per(i.unit)+(i.cost?' · cost '+rs(i.cost):'')+'</small></span><span class="r">'+esc(fmtQty(i.stock,i.unit))+(i.unit==='pcs'?' pcs':'')+'</span></button></li>';}).join(''):'<li><p class="empty" style="padding:14px">'+(lowOnly?'Nothing is running low.':'No items match. Say "naya item Kurkure 20 rupaye" or tap Add item.')+'</p></li>';
+}
+function viewKhata(){
+  var cs=S.customers.slice().sort(function(a,b){return b.balance-a.balance;}),out=0;cs.forEach(function(c){if(c.balance>0)out+=c.balance;});
+  var h='<div class="stats"><div class="stat"><span class="label">Total udhaar baaki</span><b>'+rs(out)+'</b></div><div class="stat"><span class="label">Customers</span><b>'+cs.length+'</b></div></div>';
+  h+='<form class="row" id="formCust" novalidate><input class="field grow" id="newCust" maxlength="60" placeholder="New customer name" aria-label="New customer name"><button class="btn small" type="submit">Add customer</button></form>';
+  h+='<ul class="list">'+(cs.length?cs.map(function(c){return '<li><button type="button" class="rowbtn" data-act="openCust" data-id="'+esc(c.id)+'"><span class="l"><b>'+esc(c.name)+'</b><small>'+c.ledger.length+' entries</small></span><span class="r '+(c.balance>0?'pos':'neg')+'">'+rs(c.balance)+'</span></button></li>';}).join(''):'<li><p class="empty" style="padding:14px">No customers yet. Add one above, or say "Sharma ji ke khaate mein" while billing.</p></li>')+'</ul>';
+  return h;
+}
+function viewReport(){
+  var r=todayReport(),lw=lowItems(),mx=Math.max(r.cash,r.upi,r.card,r.udhaar,1),h='';
+  h+='<div class="stats"><div class="stat"><span class="label">Sales today</span><b>'+rs(r.sales)+'</b></div><div class="stat"><span class="label">Bills</span><b>'+r.n+'</b></div><div class="stat"><span class="label">Estimated profit</span><b>'+rs(r.profit)+'</b></div><div class="stat"><span class="label">Expenses</span><b>'+rs(r.exp)+'</b></div></div>';
+  h+='<h2>How customers paid today</h2><div class="bars">'+[['Cash',r.cash],['UPI',r.upi],['Card',r.card],['Udhaar',r.udhaar]].map(function(x){return '<div class="bar"><span>'+x[0]+'</span><span class="track"><i style="width:'+Math.max(0,Math.round(x[1]/mx*100))+'%"></i></span><span>'+rs(x[1])+'</span></div>';}).join('')+'</div>';
+  var top=Object.keys(r.top).map(function(k){return [k,r.top[k]];}).sort(function(a,b){return b[1]-a[1];}).slice(0,5);
+  h+='<h2>Top items today</h2><ul class="list">'+(top.length?top.map(function(x){return '<li><div class="rowbtn"><span class="l"><b>'+esc(x[0])+'</b></span><span class="r">'+rs(x[1])+'</span></div></li>';}).join(''):'<li><p class="empty" style="padding:14px">No sales yet today. Finished bills show up here.</p></li>')+'</ul>';
+  h+='<h2>Running low ('+lw.length+')</h2><ul class="list">'+(lw.length?lw.map(function(i){return '<li><div class="rowbtn"><span class="l"><b>'+esc(i.name)+stockTag(i)+'</b><small>warn below '+esc(fmtQty(i.low,i.unit))+'</small></span><span class="r">'+esc(fmtQty(i.stock,i.unit))+'</span></div></li>';}).join(''):'<li><p class="empty" style="padding:14px">All items are above their warning level.</p></li>')+'</ul>';
+  var rb=S.bills.slice(-8).reverse();
+  h+='<h2>Recent bills</h2><ul class="list">'+(rb.length?rb.map(function(b){return '<li><div class="rowbtn"><span class="l"><b>#'+b.no+' · '+esc(b.mode==='udhaar'?'Udhaar · '+b.cust:b.mode.toUpperCase())+'</b><small>'+esc(new Date(b.t).toLocaleString('en-IN',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}))+' · '+b.lines.length+' items</small></span><span class="r">'+rs(b.total)+'</span></div></li>';}).join(''):'<li><p class="empty" style="padding:14px">No bills yet.</p></li>')+'</ul>';
+  return h;
+}
+
+/* ---------- dialogs + tap actions ---------- */
+function openDlg(id){var d=el(id);try{if(!d.open)d.showModal();}catch(e){d.setAttribute('open','');}}
+function closeDlgs(){['dlgItem','dlgCust','dlgSet'].forEach(function(id){var d=el(id);try{if(d.open)d.close();}catch(e){d.removeAttribute('open');}});}
+function openItem(id){
+  editId=id||null;var it=id?byId(id):null;
+  el('itemTitle').textContent=it?'Edit item':'Add item';el('itName').value=it?it.name:'';el('itAliases').value=it?(it.aliases||[]).join(', '):'';
+  el('itUnit').value=it?it.unit:'pcs';el('itPack').value=it&&it.pack?it.pack:'';el('itPrice').value=it?it.price:'';el('itCost').value=it&&it.cost?it.cost:'';el('itStock').value=it?it.stock:'';el('itLow').value=it?it.low:'';
+  el('itErr').textContent='';el('itDel').hidden=!it;el('itDel').textContent='Delete';openDlg('dlgItem');
+}
+function numField(id,max){var v=el(id).value.trim();if(v==='')return 0;var n=Number(v);return isFinite(n)&&Math.abs(n)<=max?n:NaN;}
+function saveItem(){
+  var name=el('itName').value.trim().slice(0,60),price=numField('itPrice',1e6),cost=numField('itCost',1e6),stock=numField('itStock',1e6),low=numField('itLow',1e6),pack=numField('itPack',10000);
+  if(!name)return el('itErr').textContent='Enter the item name.';
+  if([price,cost,stock,low,pack].some(isNaN)||price<0||cost<0||low<0||pack<0)return el('itErr').textContent='Check the numbers. Prices cannot be negative.';
+  var aliases=el('itAliases').value.split(',').map(function(a){return a.trim().slice(0,40);}).filter(Boolean).slice(0,20);
+  pushUndo();var it=editId?byId(editId):null;
+  if(!it){it={id:gid(),aliases:[]};S.items.push(it);}
+  it.name=name;it.aliases=aliases;it.unit=el('itUnit').value==='kg'?'kg':el('itUnit').value==='l'?'l':'pcs';it.price=r2(price);it.cost=r2(cost);it.stock=r3(stock);it.low=r3(low);it.pack=Math.floor(pack);
+  closeDlgs();finish();
+}
+function openCustomer(id){
+  var c=custById(id);if(!c)return;openCust=id;
+  el('cuName').textContent=c.name;el('cuBal').textContent=rs(c.balance);el('cuAmt').value='';el('cuErr').textContent='';el('cuCopy').hidden=true;
+  el('cuLedger').innerHTML=c.ledger.length?c.ledger.slice().reverse().map(function(e){return '<li><span>'+esc(new Date(e.t).toLocaleDateString('en-IN',{day:'numeric',month:'short'}))+' · '+esc(e.note)+'</span><span class="a '+(e.type==='jama'?'neg':'pos')+'">'+(e.type==='jama'?'−':'+')+rs(e.amt)+'</span></li>';}).join(''):'<li><span>No entries yet.</span></li>';
+  openDlg('dlgCust');
+}
+function copyText(text,areaId){
+  var ta=el(areaId);function show(){ta.hidden=false;ta.value=text;ta.focus();ta.select();}
+  try{navigator.clipboard.writeText(text).then(function(){ta.hidden=false;ta.value='Copied. Paste it in WhatsApp.\n\n'+text;},show);}catch(e){show();}
+}
+function onClick(ev){
+  var b=ev.target.closest('[data-act]');if(!b||b.disabled)return;var act=b.getAttribute('data-act');
+  if(act==='mic')return micClick();
+  if(act==='settings'){if(!ready)return;el('setName').value=S.shop.name;el('setUpi').value=S.shop.upi;el('setLang').value=S.shop.lang;el('setErr').textContent='';el('btnReset').textContent='Erase everything and load the example shop';el('btnReset').removeAttribute('data-armed');return openDlg('dlgSet');}
+  if(act==='close')return closeDlgs();
+  if(!ready)return;
+  if(act==='tab'){tab=b.getAttribute('data-tab');return render();}
+  if(act==='run')return handle(b.getAttribute('data-run'));
+  if(act==='undo')return handle('undo');
+  if(act==='dismiss'){S.example=false;return finish();}
+  if(act==='swap'){var ids=b.getAttribute('data-swap').split('|'),to=byId(ids[1]);
+    var ln=null;S.draft.lines.forEach(function(l){if(l.itemId===ids[0])ln=l;});
+    if(ln&&to){pushUndo();ln.itemId=to.id;ln.name=to.name;ln.unit=to.unit;ln.price=to.price;ln.cost=to.cost;ln.amount=0;setReply('Change to '+to.name,'Changed to '+to.name+'. Total '+rs(totals().total)+'.','ok');}
+    return finish();}
+  if(act==='qty'||act==='del'){var i=Number(b.getAttribute('data-i')),l=S.draft.lines[i];if(!l)return;pushUndo();
+    if(act==='del')S.draft.lines.splice(i,1);
+    else{var step=l.unit==='pcs'?1:0.25,nq=r3(l.qty+step*Number(b.getAttribute('data-d')));if(nq<=0)S.draft.lines.splice(i,1);else{l.qty=nq;l.amount=0;}}
+    return finish();}
+  if(act==='lowOnly'){lowOnly=!lowOnly;return render();}
+  if(act==='newItem')return openItem(null);
+  if(act==='editItem')return openItem(b.getAttribute('data-id'));
+  if(act==='delItem'){if(!editId)return;if(b.textContent==='Delete'){b.textContent='Tap again to delete';return;}pushUndo();S.items=S.items.filter(function(x){return x.id!==editId;});S.draft.lines=S.draft.lines.filter(function(x){return x.itemId!==editId;});closeDlgs();return finish();}
+  if(act==='openCust')return openCustomer(b.getAttribute('data-id'));
+  if(act==='copyBill'){if(lastBill)copyText(billText(lastBill),'billCopy');return;}
+  if(act==='copyStatement'){var c=custById(openCust);if(!c)return;
+    return copyText([S.shop.name,'Khata: '+c.name].concat(c.ledger.map(function(e){return new Date(e.t).toLocaleDateString('en-IN')+'  '+(e.type==='jama'?'Jama -':'Udhaar +')+rs(e.amt)+'  '+e.note;})).concat(['Baaki: '+rs(c.balance)]).join('\n'),'cuCopy');}
+  if(act==='reset'){if(!b.getAttribute('data-armed')){b.setAttribute('data-armed','1');b.textContent='Tap again to erase all items, bills and khata';return;}
+    S=starter();undo=[];pending=null;reply=null;log=[];lastBill=null;tab='bill';closeDlgs();return finish();}
+}
+function boot2(){
+  var inp=el('cmdInput');inp.disabled=false;el('cmdSend').disabled=false;
+  el('chips').innerHTML=CHIPS.map(function(c){return '<button type="button" class="chip" data-act="run" data-run="'+esc(c)+'">'+esc(c)+'</button>';}).join('');
+  render();
+}
+function boot(){
+  document.addEventListener('click',onClick);
+  el('cmdForm').addEventListener('submit',function(e){e.preventDefault();var v=el('cmdInput').value;if(!ready||!v.trim())return;el('cmdInput').value='';handle(v);});
+  el('formItem').addEventListener('submit',function(e){e.preventDefault();if(ready)saveItem();});
+  el('formPay').addEventListener('submit',function(e){e.preventDefault();var c=custById(openCust),a=Number(el('cuAmt').value);
+    if(!c)return;if(!(a>0)||a>1e7)return el('cuErr').textContent='Enter the amount received.';
+    pushUndo();a=r2(a);c.balance=r2(c.balance-a);c.ledger.push({t:Date.now(),type:'jama',amt:a,note:'Payment received'});if(c.ledger.length>100)c.ledger=c.ledger.slice(-100);
+    setReply(c.name+' paid '+rs(a),c.name+' paid '+rs(a)+'. Baaki now '+rs(c.balance)+'.','ok');finish();openCustomer(c.id);});
+  el('formSet').addEventListener('submit',function(e){e.preventDefault();if(!ready)return;var name=el('setName').value.trim().slice(0,60),upi=el('setUpi').value.trim().slice(0,80);
+    if(!name)return el('setErr').textContent='Enter the shop name.';
+    if(upi&&!/^[a-z0-9._-]{2,}@[a-z0-9.-]{2,}$/i.test(upi))return el('setErr').textContent='That UPI ID does not look right. It should look like name@bank.';
+    S.shop.name=name;S.shop.upi=upi;S.shop.lang=el('setLang').value==='hi'?'hi':el('setLang').value==='en'?'en':'auto';closeDlgs();finish();});
+  document.addEventListener('submit',function(e){if(e.target&&e.target.id==='formCust'){e.preventDefault();if(!ready)return;var n=el('newCust').value.trim().slice(0,60);if(!n)return;pushUndo();S.customers.push({id:gid(),name:n,aliases:[],balance:0,ledger:[]});finish();}});
+  document.addEventListener('input',function(e){if(e.target&&e.target.id==='stockSearch'){stockQ=e.target.value.slice(0,60);renderStockList();}});
+  initStore();initVoice();
+}
+if(HAS_DOM){if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();}
+else{module.exports={handle:handle,normalize:normalize,init:function(){S=starter();ready=true;},state:function(){return S;},reply:function(){return reply;},totals:totals};}
+})();
+</script>
+
+</body>
+</html>
