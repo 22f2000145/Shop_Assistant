@@ -41,6 +41,14 @@ python3 -m http.server 8000
 
 It understands Indian quantities and units: pav, adha, dedh, dhai, sawa, saadhe, paune, darjan, peti, bora. Hindi (Devanagari) input is transliterated before parsing.
 
+## Other features
+
+- **Setup tab:** set the shop name and UPI ID, and add items one after another.
+- **Spoken replies:** turn on "Speak replies aloud" in Settings and the app reads each reply ("Total 347 rupaye"). Uses the browser's text-to-speech. The mic ignores input while the app is speaking.
+- **WhatsApp:** send a finished bill on WhatsApp, and send an udhaar reminder to a customer once their number is saved in Khata. These open WhatsApp with the message filled in; you press send.
+- **Bill history:** the Report tab lists the last 20 bills. Tap one to see its items, copy it or send it again.
+- **Empty shop:** Settings can erase everything and start with no items or customers, keeping the shop name.
+
 ## Works without Claude
 
 `index.html` is a normal web page. It needs no server, no account and no paid service.

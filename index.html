@@ -125,6 +125,11 @@ h2{font:700 20px var(--display);margin:6px 0 0}
 .form label{display:flex;flex-direction:column;gap:4px;font-size:14px;font-weight:500;color:var(--muted)}
 .msg{font-size:15px;min-height:1.3em;margin:0;color:var(--ok);font-weight:500}
 .msg.bad{color:var(--bad)}
+a.btn{display:inline-flex;align-items:center;justify-content:center;text-decoration:none;color:var(--ink)}
+a.btn.primary{color:var(--brand-ink)}
+.dlg label.check{flex-direction:row;align-items:center;gap:10px;color:var(--ink);font-size:16px}
+.check input{width:22px;height:22px;flex:none}
+.hint{font-size:14px;color:var(--muted);margin:0}
 dialog{border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--ink);padding:0;width:min(460px,calc(100vw - 32px));max-height:calc(100vh - 48px)}
 dialog::backdrop{background:rgba(8,10,25,.55)}
 .dlg{padding:18px;display:flex;flex-direction:column;gap:12px}
@@ -216,10 +221,21 @@ textarea.copy{width:100%;min-height:150px;font:400 13px var(--mono);border:1px s
   <div class="tot big"><span>Baaki</span><span id="cuBal">₹0</span></div>
   <form class="row" id="formPay" novalidate><input class="field grow" id="cuAmt" type="number" min="1" step="0.01" inputmode="decimal" placeholder="Amount received ₹" aria-label="Amount received"><button class="btn primary" type="submit">Record payment</button></form>
   <p class="err" id="cuErr"></p>
+  <form class="row" id="formPhone" novalidate><input class="field grow" id="cuPhone" type="tel" inputmode="numeric" maxlength="15" placeholder="WhatsApp number (10 digits)" aria-label="WhatsApp number"><button class="btn" type="submit">Save number</button></form>
+  <div class="row" id="cuWa"></div>
   <p class="label">Ledger</p>
   <ul class="ledger" id="cuLedger"></ul>
   <div class="row"><button class="btn" type="button" data-act="copyStatement">Copy statement</button><button class="btn" type="button" data-act="close">Close</button></div>
   <textarea class="copy" id="cuCopy" readonly hidden aria-label="Statement text"></textarea>
+</div></dialog>
+
+<dialog id="dlgBill"><div class="dlg">
+  <h3 id="bdTitle">Bill</h3>
+  <p class="hint" id="bdMeta"></p>
+  <ul class="ledger" id="bdLines"></ul>
+  <div class="tot big"><span>Total</span><span id="bdTotal">₹0</span></div>
+  <div class="row"><a class="btn primary" id="bdWa" target="_blank" rel="noopener" href="https://wa.me/">Send on WhatsApp</a><button class="btn" type="button" data-act="copyBillD">Copy bill text</button><button class="btn" type="button" data-act="close">Close</button></div>
+  <textarea class="copy" id="bdCopy" readonly hidden aria-label="Bill text"></textarea>
 </div></dialog>
 
 <dialog id="dlgSet"><form class="dlg" id="formSet" novalidate>
@@ -227,6 +243,7 @@ textarea.copy{width:100%;min-height:150px;font:400 13px var(--mono);border:1px s
   <label>Shop name (printed on bills)<input class="field" id="setName" maxlength="60"></label>
   <label>UPI ID for the payment QR (optional)<input class="field" id="setUpi" maxlength="80" placeholder="yourshop@upi" autocapitalize="off" spellcheck="false"></label>
   <label>Voice language<select class="field" id="setLang"><option value="auto">Automatic (Hinglish, Hindi, English)</option><option value="hi">Hindi</option><option value="en">English</option></select></label>
+  <label class="check"><input type="checkbox" id="setSpeak"> Speak replies aloud (app bol kar jawab dega)</label>
   <p class="err" id="setErr"></p>
   <div class="row"><button class="btn primary" type="submit">Save</button><button class="btn" type="button" data-act="close">Cancel</button></div>
   <p class="label">Database</p>
@@ -235,7 +252,7 @@ textarea.copy{width:100%;min-height:150px;font:400 13px var(--mono);border:1px s
   <div class="row"><button class="btn small" type="button" data-act="backup">Show backup text</button><button class="btn small" type="button" data-act="restore">Restore from backup text</button></div>
   <textarea class="copy" id="setBackup" hidden aria-label="Backup text" placeholder="Paste your backup text here, then tap Restore again"></textarea>
   <p class="label">Start over</p>
-  <div class="row"><button class="btn danger" type="button" data-act="reset" id="btnReset">Erase everything and load the example shop</button></div>
+  <div class="row"><button class="btn danger" type="button" id="btnEmpty" data-act="resetEmpty">Erase everything and start with an empty shop</button><button class="btn danger" type="button" data-act="reset" id="btnReset">Erase everything and load the example shop</button></div>
 </form></dialog>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
@@ -257,7 +274,7 @@ function per(u){return u==='kg'?'/kg':u==='l'?'/L':'';}
 function starter(){
   function I(name,unit,price,cost,stock,low,aliases,pack){return {id:gid(),name:name,unit:unit,price:price,cost:cost,stock:stock,low:low,aliases:aliases||[],pack:pack||0};}
   function C(name,aliases,bal){return {id:gid(),name:name,aliases:aliases,balance:bal,ledger:bal?[{t:Date.now()-86400000*3,type:'udhaar',amt:bal,note:'Opening balance (example)'}]:[]};}
-  return {v:1,example:true,shop:{name:'My Kirana Store',upi:'',lang:'auto'},billNo:1,
+  return {v:1,example:true,shop:{name:'My Kirana Store',upi:'',lang:'auto',speak:false},billNo:1,
     items:[
       I('Atta (loose)','kg',42,36,50,10,['atta','aata','flour','wheat flour']),
       I('Chawal (rice)','kg',60,50,40,10,['chawal','chaval','rice']),
@@ -294,10 +311,10 @@ function sanitize(d){
     var draft=function(x){x=x||{};return {lines:(Array.isArray(x.lines)?x.lines:[]).slice(0,100).map(function(l){return {itemId:str(l.itemId,40),name:str(l.name,60),qty:num(l.qty,1),unit:unit(l.unit),price:num(l.price),cost:num(l.cost),amount:Math.max(0,num(l.amount))};}),disc:Math.max(0,num(x.disc)),pct:Math.min(100,Math.max(0,num(x.pct)))};};
     var sh=d.shop||{};
     return {v:1,example:!!d.example,
-      shop:{name:str(sh.name,60)||'My Shop',upi:str(sh.upi,80),lang:sh.lang==='hi'||sh.lang==='en'?sh.lang:'auto'},
+      shop:{name:str(sh.name,60)||'My Shop',upi:str(sh.upi,80),lang:sh.lang==='hi'||sh.lang==='en'?sh.lang:'auto',speak:!!sh.speak},
       billNo:Math.max(1,Math.floor(num(d.billNo,1))),
       items:d.items.slice(0,1500).map(function(i){return {id:str(i.id,40)||gid(),name:str(i.name,60)||'Item',unit:unit(i.unit),price:Math.max(0,num(i.price)),cost:Math.max(0,num(i.cost)),stock:num(i.stock),low:Math.max(0,num(i.low)),aliases:(Array.isArray(i.aliases)?i.aliases:[]).slice(0,20).map(function(a){return str(a,40);}),pack:Math.max(0,num(i.pack))};}),
-      customers:(Array.isArray(d.customers)?d.customers:[]).slice(0,1500).map(function(c){return {id:str(c.id,40)||gid(),name:str(c.name,60)||'Customer',aliases:(Array.isArray(c.aliases)?c.aliases:[]).slice(0,10).map(function(a){return str(a,40);}),balance:num(c.balance),ledger:(Array.isArray(c.ledger)?c.ledger:[]).slice(-100).map(function(e){return {t:num(e.t),type:e.type==='jama'?'jama':'udhaar',amt:num(e.amt),note:str(e.note,80)};})};}),
+      customers:(Array.isArray(d.customers)?d.customers:[]).slice(0,1500).map(function(c){return {id:str(c.id,40)||gid(),name:str(c.name,60)||'Customer',phone:str(c.phone,20).replace(/\D/g,'').slice(0,15),aliases:(Array.isArray(c.aliases)?c.aliases:[]).slice(0,10).map(function(a){return str(a,40);}),balance:num(c.balance),ledger:(Array.isArray(c.ledger)?c.ledger:[]).slice(-100).map(function(e){return {t:num(e.t),type:e.type==='jama'?'jama':'udhaar',amt:num(e.amt),note:str(e.note,80)};})};}),
       bills:(Array.isArray(d.bills)?d.bills:[]).slice(-1000).map(function(b){return {id:str(b.id,40)||gid(),no:num(b.no),t:num(b.t),disc:num(b.disc),total:num(b.total),mode:str(b.mode,10),cust:str(b.cust,60),lines:(Array.isArray(b.lines)?b.lines:[]).slice(0,100).map(function(l){return {name:str(l.name,60),qty:num(l.qty),unit:unit(l.unit),price:num(l.price),cost:num(l.cost),total:num(l.total)};})};}),
       expenses:(Array.isArray(d.expenses)?d.expenses:[]).slice(-300).map(function(e){return {id:str(e.id,40)||gid(),t:num(e.t),amt:num(e.amt),note:str(e.note,80)};}),
       draft:draft(d.draft),held:(Array.isArray(d.held)?d.held:[]).slice(0,5).map(draft)};
@@ -474,7 +491,7 @@ function handle(raw){
   var heard=String(raw==null?'':raw).trim().slice(0,300);if(!heard||!S)return;
   buildIndex();
   var text=normalize(heard),tokens=text?text.split(' '):[];
-  function R(t,tone,actions,qr){setReply(heard,t,tone,actions,qr);finish();}
+  function R(t,tone,actions,qr){setReply(heard,t,tone,actions,qr);speak(t);finish();}
   if(!tokens.length)return R('Could not understand that. Please try again.','err');
   if(pending){var p=pending;pending=null;
     if(p.type==='confirm'){if(YES.test(text))return p.yes(R);if(NO.test(text))return R('Cancelled. Nothing was changed.','warn');}
@@ -671,7 +688,18 @@ function initStore(){
 }
 
 /* ---------- voice ---------- */
-var dict=null,buf='',autoT=null;
+var dict=null,buf='',autoT=null,ttsCap=null,speaking=false,spk=0;
+function speak(text,force){
+  if(!HAS_DOM||!S||(!S.shop.speak&&!force))return;
+  var t=String(text).replace(/₹\s?([\d,]+(?:\.\d+)?)/g,'$1 rupaye').replace(/[#"“”()]/g,' ').slice(0,300);
+  if(ttsCap){try{ttsCap.speak(t).catch(function(){});}catch(e){}return;}
+  var sy=window.speechSynthesis;if(!sy||typeof SpeechSynthesisUtterance==='undefined')return;
+  try{sy.cancel();var u=new SpeechSynthesisUtterance(t),id=++spk;u.lang='hi-IN';u.rate=1.05;speaking=true;
+    u.onend=u.onerror=function(){setTimeout(function(){if(id===spk)speaking=false;},350);};
+    sy.speak(u);setTimeout(function(){if(id===spk)speaking=false;},20000);}catch(e){speaking=false;}
+}
+function waLink(text,phone){return 'https://wa.me/'+(phone||'')+'?text='+encodeURIComponent(text);}
+function custPhone(name){for(var i=0;i<S.customers.length;i++)if(S.customers[i].name===name)return S.customers[i].phone||'';return '';}
 function flushVoice(){clearTimeout(autoT);var t=buf.trim();buf='';var lv=document.getElementById('live');if(lv)lv.textContent='';if(t&&ready)handle(t);}
 function micUI(state,msg){
   var b=document.getElementById('mic'),t=document.getElementById('micTitle'),h=document.getElementById('micHint');
@@ -695,8 +723,8 @@ function webDict(onP,onF,onS){
     stop:function(){want=false;try{if(rec)rec.stop();}catch(x){}return Promise.resolve();}};
 }
 function initVoice(){
-  function onP(e){var pt=(e&&e.text)||'';if(pt)clearTimeout(autoT);document.getElementById('live').textContent=(buf+' '+pt).trim();}
-  function onF(e){buf+=(e&&e.text)||'';document.getElementById('live').textContent=buf.trim();clearTimeout(autoT);if(buf.trim())autoT=setTimeout(flushVoice,1400);}
+  function onP(e){if(speaking)return;var pt=(e&&e.text)||'';if(pt)clearTimeout(autoT);document.getElementById('live').textContent=(buf+' '+pt).trim();}
+  function onF(e){if(speaking)return;buf+=(e&&e.text)||'';document.getElementById('live').textContent=buf.trim();clearTimeout(autoT);if(buf.trim())autoT=setTimeout(flushVoice,1400);}
   function onS(e){var st=e&&e.state,msg='';
     if(st==='idle'){var why=e.reason;
       if(why==='not_granted')msg='Microphone permission is off for this page. Allow it in the browser, or type instead.';
@@ -706,6 +734,7 @@ function initVoice(){
     micUI(st,msg);}
   var C=window.claude;
   if(!C||typeof C.use!=='function'){dict=webDict(onP,onF,onS);return micUI(dict?'idle':undefined);}
+  C.use('tts').then(function(t){ttsCap=t||null;},function(){});
   C.use('dictation').then(function(d){
     dict=d||null;if(!dict)return micUI();
     dict.onPartial(onP);dict.onFinal(onF);dict.onState(onS);micUI('idle');
@@ -750,7 +779,7 @@ function viewBill(){
   var dis=d.lines.length?'':' disabled';
   h+='<div class="pay"><button type="button" class="btn primary" data-act="run" data-run="cash"'+dis+'>Cash</button><button type="button" class="btn primary" data-act="run" data-run="upi"'+dis+'>UPI</button><button type="button" class="btn primary" data-act="run" data-run="udhaar"'+dis+'>Udhaar</button></div>';
   h+='<div class="row"><button type="button" class="btn small" data-act="run" data-run="hold"'+dis+'>Hold bill</button>'+(S.held.length?'<button type="button" class="btn small" data-act="run" data-run="resume">Open held bill ('+S.held.length+')</button>':'')+'<button type="button" class="btn small danger" data-act="run" data-run="cancel"'+dis+'>Clear bill</button></div>';
-  if(lastBill)h+='<h2>Last bill #'+lastBill.no+' · '+rs(lastBill.total)+'</h2><div class="row"><button type="button" class="btn small" data-act="copyBill">Copy bill text for WhatsApp</button></div><textarea class="copy" id="billCopy" readonly hidden aria-label="Bill text"></textarea>';
+  if(lastBill)h+='<h2>Last bill #'+lastBill.no+' · '+rs(lastBill.total)+'</h2><div class="row"><a class="btn small primary" target="_blank" rel="noopener" href="'+esc(waLink(billText(lastBill),lastBill.mode==='udhaar'?custPhone(lastBill.cust):''))+'">Send bill on WhatsApp</a><button type="button" class="btn small" data-act="copyBill">Copy bill text</button></div><textarea class="copy" id="billCopy" readonly hidden aria-label="Bill text"></textarea>';
   return h;
 }
 function stockTag(i){return i.stock<=0?'<span class="tag out">Out</span>':i.stock<=i.low?'<span class="tag low">Low</span>':'';}
@@ -812,14 +841,14 @@ function viewReport(){
   var top=Object.keys(r.top).map(function(k){return [k,r.top[k]];}).sort(function(a,b){return b[1]-a[1];}).slice(0,5);
   h+='<h2>Top items today</h2><ul class="list">'+(top.length?top.map(function(x){return '<li><div class="rowbtn"><span class="l"><b>'+esc(x[0])+'</b></span><span class="r">'+rs(x[1])+'</span></div></li>';}).join(''):'<li><p class="empty" style="padding:14px">No sales yet today. Finished bills show up here.</p></li>')+'</ul>';
   h+='<h2>Running low ('+lw.length+')</h2><ul class="list">'+(lw.length?lw.map(function(i){return '<li><div class="rowbtn"><span class="l"><b>'+esc(i.name)+stockTag(i)+'</b><small>warn below '+esc(fmtQty(i.low,i.unit))+'</small></span><span class="r">'+esc(fmtQty(i.stock,i.unit))+'</span></div></li>';}).join(''):'<li><p class="empty" style="padding:14px">All items are above their warning level.</p></li>')+'</ul>';
-  var rb=S.bills.slice(-8).reverse();
-  h+='<h2>Recent bills</h2><ul class="list">'+(rb.length?rb.map(function(b){return '<li><div class="rowbtn"><span class="l"><b>#'+b.no+' · '+esc(b.mode==='udhaar'?'Udhaar · '+b.cust:b.mode.toUpperCase())+'</b><small>'+esc(new Date(b.t).toLocaleString('en-IN',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}))+' · '+b.lines.length+' items</small></span><span class="r">'+rs(b.total)+'</span></div></li>';}).join(''):'<li><p class="empty" style="padding:14px">No bills yet.</p></li>')+'</ul>';
+  var rb=S.bills.slice(-20).reverse();
+  h+='<h2>Bill history (tap to open)</h2><ul class="list">'+(rb.length?rb.map(function(b){return '<li><button type="button" class="rowbtn" data-act="openBill" data-id="'+esc(b.id)+'"><span class="l"><b>#'+b.no+' · '+esc(b.mode==='udhaar'?'Udhaar · '+b.cust:b.mode.toUpperCase())+'</b><small>'+esc(new Date(b.t).toLocaleString('en-IN',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}))+' · '+b.lines.length+' items</small></span><span class="r">'+rs(b.total)+'</span></button></li>';}).join(''):'<li><p class="empty" style="padding:14px">No bills yet. Finished bills are listed here.</p></li>')+'</ul>';
   return h;
 }
 
 /* ---------- dialogs + tap actions ---------- */
 function openDlg(id){var d=el(id);try{if(!d.open)d.showModal();}catch(e){d.setAttribute('open','');}}
-function closeDlgs(){['dlgItem','dlgCust','dlgSet'].forEach(function(id){var d=el(id);try{if(d.open)d.close();}catch(e){d.removeAttribute('open');}});}
+function closeDlgs(){['dlgItem','dlgCust','dlgSet','dlgBill'].forEach(function(id){var d=el(id);try{if(d.open)d.close();}catch(e){d.removeAttribute('open');}});}
 function openItem(id){
   editId=id||null;var it=id?byId(id):null;
   el('itemTitle').textContent=it?'Edit item':'Add item';el('itName').value=it?it.name:'';el('itAliases').value=it?(it.aliases||[]).join(', '):'';
@@ -837,9 +866,19 @@ function saveItem(){
   it.name=name;it.aliases=aliases;it.unit=el('itUnit').value==='kg'?'kg':el('itUnit').value==='l'?'l':'pcs';it.price=r2(price);it.cost=r2(cost);it.stock=r3(stock);it.low=r3(low);it.pack=Math.floor(pack);
   closeDlgs();finish();
 }
+var openBillId=null;
+function openBill(id){
+  var b=null;S.bills.forEach(function(x){if(x.id===id)b=x;});if(!b)return;openBillId=id;
+  el('bdTitle').textContent='Bill #'+b.no;
+  el('bdMeta').textContent=new Date(b.t).toLocaleString('en-IN')+' · '+(b.mode==='udhaar'?'Udhaar, '+b.cust:b.mode.toUpperCase());
+  el('bdLines').innerHTML=(b.lines.length?b.lines.map(function(l){return '<li><span>'+esc(l.name)+' · '+esc(fmtQty(l.qty,l.unit))+'</span><span class="a">'+rs(l.total)+'</span></li>';}).join(''):'<li><span>No items.</span></li>')+(b.disc>0?'<li><span>Discount</span><span class="a">-'+rs(b.disc)+'</span></li>':'');
+  el('bdTotal').textContent=rs(b.total);el('bdCopy').hidden=true;
+  el('bdWa').setAttribute('href',waLink(billText(b),b.mode==='udhaar'?custPhone(b.cust):''));openDlg('dlgBill');
+}
 function openCustomer(id){
   var c=custById(id);if(!c)return;openCust=id;
-  el('cuName').textContent=c.name;el('cuBal').textContent=rs(c.balance);el('cuAmt').value='';el('cuErr').textContent='';el('cuCopy').hidden=true;
+  el('cuName').textContent=c.name;el('cuBal').textContent=rs(c.balance);el('cuAmt').value='';el('cuErr').textContent='';el('cuCopy').hidden=true;el('cuPhone').value=c.phone?c.phone.replace(/^91(?=\d{10}$)/,''):'';
+  el('cuWa').innerHTML=c.phone?(c.balance>0?'<a class="btn primary" target="_blank" rel="noopener" href="'+esc(waLink('Namaste '+c.name+', '+S.shop.name+' se. Aapka '+rs(c.balance)+' baaki hai. Kripya jald jama kar dein. Dhanyavaad.',c.phone))+'">Send udhaar reminder on WhatsApp</a>':'<p class="hint">Nothing is due, so there is no reminder to send.</p>'):'<p class="hint">Save a WhatsApp number to send udhaar reminders.</p>';
   el('cuLedger').innerHTML=c.ledger.length?c.ledger.slice().reverse().map(function(e){return '<li><span>'+esc(new Date(e.t).toLocaleDateString('en-IN',{day:'numeric',month:'short'}))+' · '+esc(e.note)+'</span><span class="a '+(e.type==='jama'?'neg':'pos')+'">'+(e.type==='jama'?'−':'+')+rs(e.amt)+'</span></li>';}).join(''):'<li><span>No entries yet.</span></li>';
   openDlg('dlgCust');
 }
@@ -850,7 +889,7 @@ function copyText(text,areaId){
 function onClick(ev){
   var b=ev.target.closest('[data-act]');if(!b||b.disabled)return;var act=b.getAttribute('data-act');
   if(act==='mic')return micClick();
-  if(act==='settings'){if(!ready)return;el('setName').value=S.shop.name;el('setUpi').value=S.shop.upi;el('setLang').value=S.shop.lang;el('setErr').textContent='';el('setBackup').hidden=true;el('setBackup').value='';idbCounts(function(o){var t='Bills, expenses and khata entries older than 6 months are deleted automatically. Items, customers and balances are always kept.';el('dbInfo').textContent=(o?'Stored on this device: '+o.items+' items, '+o.customers+' customers, '+o.bills+' bills, '+o.expenses+' expenses. ':'')+t;});el('btnReset').textContent='Erase everything and load the example shop';el('btnReset').removeAttribute('data-armed');return openDlg('dlgSet');}
+  if(act==='settings'){if(!ready)return;el('setName').value=S.shop.name;el('setUpi').value=S.shop.upi;el('setLang').value=S.shop.lang;el('setSpeak').checked=!!S.shop.speak;el('btnEmpty').textContent='Erase everything and start with an empty shop';el('btnEmpty').removeAttribute('data-armed');el('setErr').textContent='';el('setBackup').hidden=true;el('setBackup').value='';idbCounts(function(o){var t='Bills, expenses and khata entries older than 6 months are deleted automatically. Items, customers and balances are always kept.';el('dbInfo').textContent=(o?'Stored on this device: '+o.items+' items, '+o.customers+' customers, '+o.bills+' bills, '+o.expenses+' expenses. ':'')+t;});el('btnReset').textContent='Erase everything and load the example shop';el('btnReset').removeAttribute('data-armed');return openDlg('dlgSet');}
   if(act==='close')return closeDlgs();
   if(!ready)return;
   if(act==='tab'){tab=b.getAttribute('data-tab');setupMsg={shop:'',add:''};return render();}
@@ -878,6 +917,10 @@ function onClick(ev){
     var nd=null;try{nd=sanitize(JSON.parse(rt.value));}catch(e){nd=null;}
     if(!nd){el('setErr').textContent='That is not a valid VoiceShop backup. Nothing was changed.';return;}
     pushUndo();S=nd;idbWipe=true;pending=null;reply=null;lastBill=null;closeDlgs();return finish();}
+  if(act==='openBill')return openBill(b.getAttribute('data-id'));
+  if(act==='copyBillD'){var ob=null;S.bills.forEach(function(x){if(x.id===openBillId)ob=x;});if(ob)copyText(billText(ob),'bdCopy');return;}
+  if(act==='resetEmpty'){if(!b.getAttribute('data-armed')){b.setAttribute('data-armed','1');b.textContent='Tap again to erase all items, bills and khata';return;}
+    var keep=S.shop;S=starter();S.items=[];S.customers=[];S.example=false;S.shop=keep;idbWipe=true;undo=[];pending=null;reply=null;log=[];lastBill=null;tab='setup';closeDlgs();return finish();}
   if(act==='reset'){if(!b.getAttribute('data-armed')){b.setAttribute('data-armed','1');b.textContent='Tap again to erase all items, bills and khata';return;}
     S=starter();idbWipe=true;undo=[];pending=null;reply=null;log=[];lastBill=null;tab='bill';closeDlgs();return finish();}
 }
@@ -895,10 +938,13 @@ function boot(){
     if(!c)return;if(!(a>0)||a>1e7)return el('cuErr').textContent='Enter the amount received.';
     pushUndo();a=r2(a);c.balance=r2(c.balance-a);c.ledger.push({t:Date.now(),type:'jama',amt:a,note:'Payment received'});if(c.ledger.length>100)c.ledger=c.ledger.slice(-100);
     setReply(c.name+' paid '+rs(a),c.name+' paid '+rs(a)+'. Baaki now '+rs(c.balance)+'.','ok');finish();openCustomer(c.id);});
+  el('formPhone').addEventListener('submit',function(e){e.preventDefault();var c=custById(openCust);if(!c||!ready)return;var d=el('cuPhone').value.replace(/\D/g,'');
+    if(d.length===10)d='91'+d;if(d&&(d.length<11||d.length>15))return el('cuErr').textContent='Enter a 10 digit mobile number.';
+    pushUndo();c.phone=d;finish();openCustomer(c.id);el('cuErr').textContent=d?'Number saved.':'Number removed.';});
   el('formSet').addEventListener('submit',function(e){e.preventDefault();if(!ready)return;var name=el('setName').value.trim().slice(0,60),upi=el('setUpi').value.trim().slice(0,80);
     if(!name)return el('setErr').textContent='Enter the shop name.';
     if(upi&&!/^[a-z0-9._-]{2,}@[a-z0-9.-]{2,}$/i.test(upi))return el('setErr').textContent='That UPI ID does not look right. It should look like name@bank.';
-    S.shop.name=name;S.shop.upi=upi;S.shop.lang=el('setLang').value==='hi'?'hi':el('setLang').value==='en'?'en':'auto';closeDlgs();finish();});
+    S.shop.name=name;S.shop.upi=upi;S.shop.lang=el('setLang').value==='hi'?'hi':el('setLang').value==='en'?'en':'auto';var was=!!S.shop.speak;S.shop.speak=!!el('setSpeak').checked;if(S.shop.speak&&!was)speak('Awaaz chalu hai. Ab main bol kar jawab dunga.');closeDlgs();finish();});
   document.addEventListener('submit',function(e){if(e.target&&(e.target.id==='formShop'||e.target.id==='formAdd')){e.preventDefault();if(ready)setupSubmit(e.target.id);return;}if(e.target&&e.target.id==='formCust'){e.preventDefault();if(!ready)return;var n=el('newCust').value.trim().slice(0,60);if(!n)return;pushUndo();S.customers.push({id:gid(),name:n,aliases:[],balance:0,ledger:[]});finish();}});
   document.addEventListener('input',function(e){if(e.target&&e.target.id==='stockSearch'){stockQ=e.target.value.slice(0,60);renderStockList();}});
   initStore();initVoice();
