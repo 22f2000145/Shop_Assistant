@@ -47,6 +47,8 @@ It understands Indian quantities and units: pav, adha, dedh, dhai, sawa, saadhe,
 - **Spoken replies:** turn on "Speak replies aloud" in Settings and the app reads each reply ("Total 347 rupaye"). Uses the browser's text-to-speech. The mic ignores input while the app is speaking.
 - **WhatsApp:** send a finished bill on WhatsApp, and send an udhaar reminder to a customer once their number is saved in Khata. These open WhatsApp with the message filled in; you press send.
 - **Bill history:** the Report tab lists the last 20 bills. Tap one to see its items, copy it or send it again.
+- **Stock update:** once a day, on first open, the app shows a stock update: items that are out, items that will finish within 7 days at the speed they are selling (based on the last 14 days), items below their warning level, and items with no sale in 14 days. Say `stock update` to get it any time.
+- **Sales analysis:** the Report tab has Today, Last 7 days and Last 30 days. It shows sales, bills, average bill, estimated profit, busiest hour, best weekday, top selling items, sales by weekday, sales day by day and how customers paid. Say `sabse zyada kya bika` for a spoken summary.
 - **Empty shop:** Settings can erase everything and start with no items or customers, keeping the shop name.
 
 ## Works without Claude
